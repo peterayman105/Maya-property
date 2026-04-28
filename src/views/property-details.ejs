@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>" dir="<%= lang === 'ar' ? 'rtl' : 'ltr' %>">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/assets/css/style.css" />
+  </head>
+  <body>
+    <% const isEn = lang === "en"; %>
+    <header class="hero">
+      <div>
+        <h1 class="brand">MAYA'S PROPERTY</h1>
+        <p class="tagline"><%= isEn ? "Unit Details" : "تفاصيل الوحدة" %></p>
+      </div>
+      <div class="toolbar">
+        <a class="btn btn-ghost" href="/properties/<%= property.id %>?lang=<%= isEn ? 'ar' : 'en' %>"><%= isEn ? "العربية" : "English" %></a>
+        <a class="btn btn-dark" href="/?lang=<%= lang %>"><%= isEn ? "Back to list" : "العودة للقائمة" %></a>
+      </div>
+    </header>
+
+    <main class="page">
+      <section class="panel">
+        <div class="row">
+          <h2><%= property.name %> - <%= isEn ? "Code" : "كود" %> <%= property.code %></h2>
+          <% if (user) { %>
+          <button class="btn btn-primary" id="toggleEdit"><%= isEn ? "Edit Unit" : "تعديل الوحدة" %></button>
+          <% } else { %>
+          <a class="btn btn-primary" href="/login?lang=<%= lang %>"><%= isEn ? "Sign in to edit" : "تسجيل الدخول للتعديل" %></a>
+          <% } %>
+        </div>
+
+        <% if (error) { %>
+        <p class="error"><%= error %></p>
+        <% } %>
+        <% if (success) { %>
+        <p class="notice"><%= success %></p>
+        <% } %>
+
+        <% if (user) { %>
+        <form id="editForm" class="form-grid hidden" method="post" action="/properties/<%= property.id %>?lang=<%= lang %>">
+          <label><%= isEn ? "Unit Name" : "اسم الوحدة" %></label>
+          <input name="name" value="<%= property.name %>" required />
+          <label><%= isEn ? "Code" : "كود الوحدة" %></label>
+          <input name="code" type="number" value="<%= property.code %>" required />
+          <label><%= isEn ? "Type" : "النوع" %></label>
+          <select name="type">
+            <option value="house" <%= property.type === "house" ? "selected" : "" %>><%= isEn ? "House" : "منزل" %></option>
+            <option value="duplex" <%= property.type === "duplex" ? "selected" : "" %>><%= isEn ? "Duplex" : "دوبلكس" %></option>
+          </select>
+          <button class="btn btn-primary" type="submit"><%= isEn ? "Save Changes" : "حفظ التعديلات" %></button>
+        </form>
+        <% } %>
+
+        <h3><%= isEn ? "Bookings Details" : "تفاصيل الحجوزات" %></h3>
+        <table>
+          <thead>
+            <tr>
+              <th><%= isEn ? "Client" : "اسم العميل" %></th>
+              <th><%= isEn ? "Start Date" : "تاريخ البدء" %></th>
+              <th><%= isEn ? "End Date" : "تاريخ الانتهاء" %></th>
+              <th><%= isEn ? "Staff" : "الموظف المسؤول" %></th>
+              <th><%= isEn ? "Status" : "حالة الحجز" %></th>
+              <% if (user) { %><th><%= isEn ? "Actions" : "إجراءات" %></th><% } %>
+            </tr>
+          </thead>
+          <tbody>
+            <% bookings.forEach((booking) => { %>
+            <tr>
+              <td><%= booking.client_name %></td>
+              <td><%= booking.start_date_display || booking.start_date %></td>
+              <td><%= booking.end_date_display || booking.end_date %></td>
+              <td><%= booking.staff_name %></td>
+              <td>
+                <%= booking.status === "confirmed" ? (isEn ? "Confirmed" : "مؤكد") : booking.status === "booked" ? (isEn ? "Booked" : "محجوز") : (isEn ? "Cancelled" : "ملغي") %>
+              </td>
+              <% if (user) { %>
+              <td>
+                <button class="btn btn-mini toggle-booking-edit" type="button" data-target="booking-edit-<%= booking.id %>">
+                  <%= isEn ? "Edit" : "تعديل" %>
+                </button>
+              </td>
+              <% } %>
+            </tr>
+            <% if (user) { %>
+            <tr id="booking-edit-<%= booking.id %>" class="hidden">
+              <td colspan="6">
+                <form class="form-grid" method="post" action="/properties/<%= property.id %>/bookings/<%= booking.id %>?lang=<%= lang %>">
+                  <label><%= isEn ? "Client Name" : "اسم العميل" %></label>
+                  <input name="client_name" value="<%= booking.client_name %>" required />
+                  <label><%= isEn ? "Staff Name" : "الموظف المسؤول" %></label>
+                  <input name="staff_name" value="<%= booking.staff_name %>" required />
+                  <label><%= isEn ? "Start Date" : "تاريخ البدء" %></label>
+                  <input type="datetime-local" name="start_date" value="<%= booking.start_date_input || booking.start_date %>" required />
+                  <label><%= isEn ? "End Date" : "تاريخ الانتهاء" %></label>
+                  <input type="datetime-local" name="end_date" value="<%= booking.end_date_input || booking.end_date %>" required />
+                  <label><%= isEn ? "Status" : "الحالة" %></label>
+                  <select name="status">
+                    <option value="booked" <%= booking.status === "booked" ? "selected" : "" %>><%= isEn ? "Booked" : "محجوز" %></option>
+                    <option value="confirmed" <%= booking.status === "confirmed" ? "selected" : "" %>><%= isEn ? "Confirmed" : "مؤكد" %></option>
+                    <option value="cancelled" <%= booking.status === "cancelled" ? "selected" : "" %>><%= isEn ? "Cancelled" : "ملغي" %></option>
+                  </select>
+                  <button class="btn btn-primary" type="submit"><%= isEn ? "Save Booking" : "حفظ الحجز" %></button>
+                </form>
+              </td>
+            </tr>
+            <% } %>
+            <% }) %>
+          </tbody>
+        </table>
+
+        <% if (user) { %>
+        <h3><%= isEn ? "Add Booking" : "إضافة حجز جديد" %></h3>
+        <form class="form-grid" method="post" action="/properties/<%= property.id %>/bookings?lang=<%= lang %>">
+          <label><%= isEn ? "Client Name" : "اسم العميل" %></label>
+          <input name="client_name" required />
+          <label><%= isEn ? "Staff Name" : "الموظف المسؤول" %></label>
+          <input name="staff_name" required />
+          <label><%= isEn ? "Start Date" : "تاريخ البدء" %></label>
+          <input type="datetime-local" name="start_date" required />
+          <label><%= isEn ? "End Date" : "تاريخ الانتهاء" %></label>
+          <input type="datetime-local" name="end_date" required />
+          <label><%= isEn ? "Status" : "الحالة" %></label>
+          <select name="status">
+            <option value="booked"><%= isEn ? "Booked" : "محجوز" %></option>
+            <option value="confirmed"><%= isEn ? "Confirmed" : "مؤكد" %></option>
+            <option value="cancelled"><%= isEn ? "Cancelled" : "ملغي" %></option>
+          </select>
+          <button class="btn btn-primary" type="submit"><%= isEn ? "Add" : "إضافة" %></button>
+        </form>
+        <% } else { %>
+        <p class="notice"><%= isEn ? "Viewer mode is enabled. Login only if you want to edit." : "وضع المشاهدة مفعل. سجل الدخول فقط إذا أردت التعديل." %></p>
+        <% } %>
+      </section>
+    </main>
+    <script src="/assets/js/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>" dir="<%= lang === 'ar' ? 'rtl' : 'ltr' %>">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/assets/css/style.css" />
+  </head>
+  <body>
+    <% const isEn = lang === "en"; %>
+    <main class="auth-page">
+      <section class="auth-box">
+        <div class="toolbar end">
+          <a class="btn btn-ghost" href="/login?lang=<%= isEn ? 'ar' : 'en' %>"><%= isEn ? "العربية" : "English" %></a>
+          <a class="btn btn-dark" href="/?lang=<%= lang %>"><%= isEn ? "Back to viewer" : "العودة للعرض" %></a>
+        </div>
+
+        <h1 class="brand">MAYA'S PROPERTY</h1>
+        <h2><%= isEn ? "Sign In" : "تسجيل الدخول" %></h2>
+        <p class="tagline"><%= isEn ? "Login is only needed for editing." : "التسجيل مطلوب فقط للتعديل." %></p>
+
+        <% if (error) { %>
+        <p class="error"><%= error %></p>
+        <% } %>
+
+        <form method="post" action="/login?lang=<%= lang %>" class="form-grid">
+          <label><%= isEn ? "Email" : "البريد الإلكتروني" %></label>
+          <input type="email" name="email" required />
+          <label><%= isEn ? "Password" : "كلمة المرور" %></label>
+          <input type="password" name="password" required />
+          <button type="submit" class="btn btn-primary"><%= isEn ? "Login" : "دخول" %></button>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

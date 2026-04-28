@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>" dir="<%= lang === 'ar' ? 'rtl' : 'ltr' %>">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/assets/css/style.css" />
+  </head>
+  <body>
+    <% const isEn = lang === "en"; %>
+    <header class="hero">
+      <div>
+        <h1 class="brand">MAYA'S PROPERTY</h1>
+        <p class="tagline"><%= isEn ? "Property Booking Viewer" : "عارض حجوزات العقارات" %></p>
+      </div>
+      <div class="toolbar">
+        <a class="btn btn-ghost" href="/?lang=<%= isEn ? 'ar' : 'en' %>"><%= isEn ? "العربية" : "English" %></a>
+        <% if (user) { %>
+        <span class="chip"><%= isEn ? "Welcome" : "مرحباً" %> <%= user.name %></span>
+        <form method="post" action="/logout?lang=<%= lang %>">
+          <button class="btn btn-dark" type="submit"><%= isEn ? "Sign out" : "تسجيل الخروج" %></button>
+        </form>
+        <% } else { %>
+        <a class="btn btn-primary" href="/login?lang=<%= lang %>"><%= isEn ? "Sign in to edit" : "تسجيل الدخول للتعديل" %></a>
+        <% } %>
+      </div>
+    </header>
+
+    <main class="page">
+      <section class="panel">
+        <div class="panel-head">
+          <h2><%= isEn ? "Units List" : "قائمة الوحدات" %></h2>
+          <p><%= isEn ? "Viewer mode is open for everyone. Editing requires login." : "وضع المشاهدة متاح للجميع، والتعديل يتطلب تسجيل دخول." %></p>
+        </div>
+        <% if (error) { %>
+        <p class="error"><%= error %></p>
+        <% } %>
+        <% if (success) { %>
+        <p class="notice"><%= success %></p>
+        <% } %>
+
+        <% if (user) { %>
+        <div class="row">
+          <h3><%= isEn ? "Add New Unit" : "إضافة وحدة جديدة" %></h3>
+          <button class="btn btn-primary" id="toggleAddUnit" type="button"><%= isEn ? "Open Add Form" : "فتح نموذج الإضافة" %></button>
+        </div>
+        <form id="addUnitForm" class="form-grid hidden" method="post" action="/properties?lang=<%= lang %>">
+          <label><%= isEn ? "Unit Name" : "اسم الوحدة" %></label>
+          <input name="name" required />
+          <label><%= isEn ? "Unit Code" : "كود الوحدة" %></label>
+          <input name="code" type="number" required />
+          <label><%= isEn ? "Type" : "النوع" %></label>
+          <select name="type" required>
+            <option value="house"><%= isEn ? "House" : "منزل" %></option>
+            <option value="duplex"><%= isEn ? "Duplex" : "دوبلكس" %></option>
+          </select>
+          <button class="btn btn-primary" type="submit"><%= isEn ? "Add Unit" : "إضافة الوحدة" %></button>
+        </form>
+        <% } %>
+
+        <table>
+          <thead>
+            <tr>
+              <th><%= isEn ? "View" : "عرض" %></th>
+              <th><%= isEn ? "Created At" : "تاريخ الإنشاء" %></th>
+              <th><%= isEn ? "Bookings" : "عدد الحجوزات" %></th>
+              <th><%= isEn ? "Code" : "كود الوحدة" %></th>
+              <th><%= isEn ? "Unit Name" : "اسم الوحدة" %></th>
+              <th><%= isEn ? "Type" : "النوع" %></th>
+              <th><%= isEn ? "Status" : "الحالة" %></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% properties.forEach((property) => { %>
+            <tr>
+              <td><a class="btn btn-mini" href="/properties/<%= property.id %>?lang=<%= lang %>"><%= isEn ? "Details" : "التفاصيل" %></a></td>
+              <td><%= property.created_at_display || property.created_at %></td>
+              <td><%= property.booked_count %></td>
+              <td><%= property.code %></td>
+              <td><%= property.name %></td>
+              <td><%= property.type === "house" ? (isEn ? "House" : "منزل") : (isEn ? "Duplex" : "دوبلكس") %></td>
+              <td><span class="<%= property.booked_count > 0 ? 'status booked' : 'status free' %>"><%= property.booked_count > 0 ? (isEn ? "Booked" : "محجوز") : (isEn ? "Available" : "غير محجوز") %></span></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </section>
+    </main>
+    <script src="/assets/js/main.js"></script>
+  </body>
+</html>
