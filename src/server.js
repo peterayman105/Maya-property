@@ -13,6 +13,7 @@ const {
   getBookingsByPropertyId,
   updateProperty,
   createProperty,
+  deleteProperty,
   findOverlappingBooking,
   createBooking,
   updateBooking
@@ -152,6 +153,16 @@ app.post("/properties/:id", requireAuth, async (req, res) => {
   const { name, code, type } = req.body;
   await updateProperty({ id: Number(req.params.id), name, code: Number(code), type });
   return res.redirect(`/properties/${req.params.id}?lang=${lang}`);
+});
+
+app.post("/properties/:id/delete", requireAuth, async (req, res) => {
+  const lang = req.query.lang === "en" ? "en" : "ar";
+  await deleteProperty(Number(req.params.id));
+  return res.redirect(
+    `/?lang=${lang}&success=${encodeURIComponent(
+      lang === "en" ? "Unit deleted." : "تم حذف الوحدة."
+    )}`
+  );
 });
 
 app.post("/properties/:id/bookings", requireAuth, async (req, res) => {

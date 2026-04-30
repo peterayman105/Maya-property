@@ -38,21 +38,32 @@
         <% } %>
 
         <% if (user) { %>
-        <form id="editForm" class="form-grid hidden" method="post" action="/properties/<%= property.id %>?lang=<%= lang %>">
-          <label><%= isEn ? "Unit Name" : "اسم الوحدة" %></label>
-          <input name="name" value="<%= property.name %>" required />
-          <label><%= isEn ? "Code" : "كود الوحدة" %></label>
-          <input name="code" type="number" value="<%= property.code %>" required />
-          <label><%= isEn ? "Type" : "النوع" %></label>
-          <select name="type">
-            <option value="house" <%= property.type === "house" ? "selected" : "" %>><%= isEn ? "House" : "منزل" %></option>
-            <option value="duplex" <%= property.type === "duplex" ? "selected" : "" %>><%= isEn ? "Duplex" : "دوبلكس" %></option>
-          </select>
-          <button class="btn btn-primary" type="submit"><%= isEn ? "Save Changes" : "حفظ التعديلات" %></button>
-        </form>
+        <div id="editPanel" class="hidden">
+          <form id="editForm" class="form-grid" method="post" action="/properties/<%= property.id %>?lang=<%= lang %>">
+            <label><%= isEn ? "Unit Name" : "اسم الوحدة" %></label>
+            <input name="name" value="<%= property.name %>" required />
+            <label><%= isEn ? "Code" : "كود الوحدة" %></label>
+            <input name="code" type="number" value="<%= property.code %>" required />
+            <label><%= isEn ? "Type" : "النوع" %></label>
+            <select name="type">
+              <option value="house" <%= property.type === "house" ? "selected" : "" %>><%= isEn ? "House" : "منزل" %></option>
+              <option value="duplex" <%= property.type === "duplex" ? "selected" : "" %>><%= isEn ? "Duplex" : "دوبلكس" %></option>
+            </select>
+            <button class="btn btn-primary" type="submit"><%= isEn ? "Save Changes" : "حفظ التعديلات" %></button>
+          </form>
+          <form
+            class="form-grid delete-unit-form"
+            method="post"
+            action="/properties/<%= property.id %>/delete?lang=<%= lang %>"
+            onsubmit="return confirm('<%= isEn ? "Delete this unit and all its bookings?" : "حذف هذه الوحدة وجميع حجوزاتها؟" %>');"
+          >
+            <button class="btn btn-danger" type="submit"><%= isEn ? "Delete Unit" : "حذف الوحدة" %></button>
+          </form>
+        </div>
         <% } %>
 
         <h3><%= isEn ? "Bookings Details" : "تفاصيل الحجوزات" %></h3>
+        <div class="table-wrap">
         <table>
           <thead>
             <tr>
@@ -108,6 +119,7 @@
             <% }) %>
           </tbody>
         </table>
+        </div>
 
         <% if (user) { %>
         <h3><%= isEn ? "Add Booking" : "إضافة حجز جديد" %></h3>

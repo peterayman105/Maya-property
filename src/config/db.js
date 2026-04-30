@@ -71,6 +71,10 @@ async function createProperty({ code, name, type }) {
   );
 }
 
+async function deleteProperty(id) {
+  await query("DELETE FROM properties WHERE id = $1", [id]);
+}
+
 async function findOverlappingBooking({ propertyId, startDate, endDate, excludeBookingId = null }) {
   const params = [propertyId, startDate, endDate];
   let sql = `
@@ -212,6 +216,7 @@ module.exports = {
   getBookingsByPropertyId,
   updateProperty,
   createProperty,
+  deleteProperty,
   findOverlappingBooking,
   createBooking,
   updateBooking

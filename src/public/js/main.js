@@ -1,9 +1,14 @@
 const toggleEditBtn = document.getElementById("toggleEdit");
+const editPanel = document.getElementById("editPanel");
 const editForm = document.getElementById("editForm");
 const toggleAddUnitBtn = document.getElementById("toggleAddUnit");
 const addUnitForm = document.getElementById("addUnitForm");
 
-if (toggleEditBtn && editForm) {
+if (toggleEditBtn && editPanel) {
+  toggleEditBtn.addEventListener("click", () => {
+    editPanel.classList.toggle("hidden");
+  });
+} else if (toggleEditBtn && editForm) {
   toggleEditBtn.addEventListener("click", () => {
     editForm.classList.toggle("hidden");
   });
