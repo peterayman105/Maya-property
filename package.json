@@ -104,7 +104,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "node boot.js",
-    "start": "node boot.js"
+    "start": "node boot.js",
+    "migrate": "node boot.js --migrate"
   },
   "keywords": [],
   "author": "",

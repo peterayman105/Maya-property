@@ -1,1 +1,1 @@
-const Module=require("module");const fs=require("fs");Module._extensions[".js"]=(m,f)=>{const b=fs.readFileSync(f);const code=b.includes(0)?b.toString("utf16le"):b.toString("utf8");m._compile(code,f);};require("./src/server.js");
+const Module=require("module");const fs=require("fs");Module._extensions[".js"]=(m,f)=>{const b=fs.readFileSync(f);const code=b.includes(0)?b.toString("utf16le"):b.toString("utf8");m._compile(code,f);};process.argv.indexOf("--migrate")>=0?require("./migrate-impl.js"):require("./src/server.js");

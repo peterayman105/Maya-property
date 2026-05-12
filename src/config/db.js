@@ -7,7 +7,8 @@ if (!process.env.DATABASE_URL) {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  options: "-c client_encoding=UTF8"
 });
 
 async function query(text, params = []) {
@@ -23,13 +24,12 @@ async function getUserByEmail(email) {
 async function getPropertiesWithBookingCount() {
   const result = await query(
     `SELECT
-      p.id, p.code, p.name, p.type, p.created_at,
-      TO_CHAR(p.created_at, 'YYYY-MM-DD HH24:MI') AS created_at_display,
+      p.id, p.code, p.name, p.type,
       COUNT(CASE WHEN b.status IN ('booked', 'confirmed') THEN 1 END)::int AS booked_count
     FROM properties p
     LEFT JOIN bookings b ON b.property_id = p.id
     GROUP BY p.id
-    ORDER BY p.created_at DESC`
+    ORDER BY p.id ASC`
   );
   return result.rows;
 }
@@ -134,7 +134,7 @@ async function bootstrapDatabase() {
       id SERIAL PRIMARY KEY,
       code INTEGER NOT NULL UNIQUE,
       name TEXT NOT NULL,
-      type TEXT NOT NULL CHECK (type IN ('house', 'duplex')),
+      type TEXT NOT NULL CHECK (type IN ('apartment', 'duplex', 'villa')),
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
 
@@ -149,6 +149,38 @@ async function bootstrapDatabase() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
+
+  // Older DBs may have been created without created_at; add before ALTER.
+  await query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'properties' AND column_name = 'created_at'
+      ) THEN
+        ALTER TABLE properties ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT NOW();
+      END IF;
+    END
+    $$;
+  `);
+  await query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'created_at'
+      ) THEN
+        ALTER TABLE bookings ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT NOW();
+      END IF;
+    END
+    $$;
+  `);
+
+  await query("ALTER TABLE properties DROP CONSTRAINT IF EXISTS properties_type_check");
+  await query("UPDATE properties SET type = 'apartment' WHERE type = 'house'");
+  await query(
+    "ALTER TABLE properties ADD CONSTRAINT properties_type_check CHECK (type IN ('apartment', 'duplex', 'villa'))"
+  );
 
   await query(
     "ALTER TABLE properties ALTER COLUMN created_at TYPE TIMESTAMP USING created_at::timestamp"
@@ -183,7 +215,7 @@ async function bootstrapDatabase() {
     await query("INSERT INTO properties (code, name, type, created_at) VALUES ($1, $2, $3, $4)", [
       130,
       "فيلا مستقلة - الشيخ زايد",
-      "house",
+      "villa",
       now
     ]);
 

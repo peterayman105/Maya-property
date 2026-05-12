@@ -8,16 +8,22 @@
   </head>
   <body>
     <% const isEn = lang === "en"; %>
+    <% const typeLabel = (t) => {
+      if (t === "apartment" || t === "house") return isEn ? "Apartment" : "شقة";
+      if (t === "duplex") return isEn ? "Duplex" : "دوبلكس";
+      if (t === "villa") return isEn ? "Villa" : "فيلا";
+      return t || "—";
+    }; %>
     <header class="hero">
       <div>
         <h1 class="brand">MAYA'S PROPERTY</h1>
-        <p class="tagline"><%= isEn ? "Property Booking Viewer" : "عارض حجوزات العقارات" %></p>
+        <p class="tagline"><%= isEn ? "Bookings" : "الحجوزات" %></p>
       </div>
       <div class="toolbar">
         <a class="btn btn-ghost" href="/?lang=<%= isEn ? 'ar' : 'en' %>"><%= isEn ? "العربية" : "English" %></a>
         <% if (user) { %>
         <span class="chip"><%= isEn ? "Welcome" : "مرحباً" %> <%= user.name %></span>
-        <form method="post" action="/logout?lang=<%= lang %>">
+        <form method="post" action="/logout?lang=<%= lang %>" accept-charset="UTF-8">
           <button class="btn btn-dark" type="submit"><%= isEn ? "Sign out" : "تسجيل الخروج" %></button>
         </form>
         <% } else { %>
@@ -29,8 +35,8 @@
     <main class="page">
       <section class="panel">
         <div class="panel-head">
-          <h2><%= isEn ? "Units List" : "قائمة الوحدات" %></h2>
-          <p><%= isEn ? "Viewer mode is open for everyone. Editing requires login." : "وضع المشاهدة متاح للجميع، والتعديل يتطلب تسجيل دخول." %></p>
+          <h2><%= isEn ? "Units" : "الوحدات" %></h2>
+          <p><%= isEn ? "Anyone can view. Sign in to add or edit." : "المشاهدة للجميع، والتعديل بعد تسجيل الدخول." %></p>
         </div>
         <% if (error) { %>
         <p class="error"><%= error %></p>
@@ -41,20 +47,21 @@
 
         <% if (user) { %>
         <div class="row">
-          <h3><%= isEn ? "Add New Unit" : "إضافة وحدة جديدة" %></h3>
-          <button class="btn btn-primary" id="toggleAddUnit" type="button"><%= isEn ? "Open Add Form" : "فتح نموذج الإضافة" %></button>
+          <h3><%= isEn ? "Add unit" : "اضافه وحده" %></h3>
+          <button class="btn btn-primary" id="toggleAddUnit" type="button"><%= isEn ? "Add Unit" : "اضافه وحده" %></button>
         </div>
-        <form id="addUnitForm" class="form-grid hidden" method="post" action="/properties?lang=<%= lang %>">
-          <label><%= isEn ? "Unit Name" : "اسم الوحدة" %></label>
+        <form id="addUnitForm" class="form-grid hidden" method="post" action="/properties?lang=<%= lang %>" accept-charset="UTF-8">
+          <label><%= isEn ? "Name" : "الاسم" %></label>
           <input name="name" required />
-          <label><%= isEn ? "Unit Code" : "كود الوحدة" %></label>
+          <label><%= isEn ? "Apt. number" : "رقم الشقه" %></label>
           <input name="code" type="number" required />
           <label><%= isEn ? "Type" : "النوع" %></label>
           <select name="type" required>
-            <option value="house"><%= isEn ? "House" : "منزل" %></option>
+            <option value="apartment"><%= isEn ? "Apartment" : "شقة" %></option>
             <option value="duplex"><%= isEn ? "Duplex" : "دوبلكس" %></option>
+            <option value="villa"><%= isEn ? "Villa" : "فيلا" %></option>
           </select>
-          <button class="btn btn-primary" type="submit"><%= isEn ? "Add Unit" : "إضافة الوحدة" %></button>
+          <button class="btn btn-primary" type="submit"><%= isEn ? "Add" : "إضافة" %></button>
         </form>
         <% } %>
 
@@ -62,24 +69,24 @@
         <table>
           <thead>
             <tr>
-              <th><%= isEn ? "View" : "عرض" %></th>
-              <th><%= isEn ? "Created At" : "تاريخ الإنشاء" %></th>
-              <th><%= isEn ? "Bookings" : "عدد الحجوزات" %></th>
-              <th><%= isEn ? "Code" : "كود الوحدة" %></th>
-              <th><%= isEn ? "Unit Name" : "اسم الوحدة" %></th>
+              <th>#</th>
+              <th><%= isEn ? "Details" : "التفاصيل" %></th>
+              <th><%= isEn ? "Bookings" : "الحجوزات" %></th>
+              <th><%= isEn ? "Apt. no." : "رقم الشقه" %></th>
+              <th><%= isEn ? "Name" : "الاسم" %></th>
               <th><%= isEn ? "Type" : "النوع" %></th>
               <th><%= isEn ? "Status" : "الحالة" %></th>
             </tr>
           </thead>
           <tbody>
-            <% properties.forEach((property) => { %>
+            <% properties.forEach((property, idx) => { %>
             <tr>
-              <td><a class="btn btn-mini" href="/properties/<%= property.id %>?lang=<%= lang %>"><%= isEn ? "Details" : "التفاصيل" %></a></td>
-              <td><%= property.created_at_display || property.created_at %></td>
+              <td><%= idx + 1 %></td>
+              <td><a class="btn btn-mini" href="/properties/<%= property.id %>?lang=<%= lang %>"><%= isEn ? "Open" : "فتح" %></a></td>
               <td><%= property.booked_count %></td>
               <td><%= property.code %></td>
               <td><%= property.name %></td>
-              <td><%= property.type === "house" ? (isEn ? "House" : "منزل") : (isEn ? "Duplex" : "دوبلكس") %></td>
+              <td><%= typeLabel(property.type) %></td>
               <td><span class="<%= property.booked_count > 0 ? 'status booked' : 'status free' %>"><%= property.booked_count > 0 ? (isEn ? "Booked" : "محجوز") : (isEn ? "Available" : "غير محجوز") %></span></td>
             </tr>
             <% }) %>

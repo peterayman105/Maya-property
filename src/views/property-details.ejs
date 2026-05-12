@@ -8,23 +8,36 @@
   </head>
   <body>
     <% const isEn = lang === "en"; %>
+    <% const typeLabel = (t) => {
+      if (t === "apartment" || t === "house") return isEn ? "Apartment" : "شقة";
+      if (t === "duplex") return isEn ? "Duplex" : "دوبلكس";
+      if (t === "villa") return isEn ? "Villa" : "فيلا";
+      return t || "—";
+    }; %>
     <header class="hero">
       <div>
         <h1 class="brand">MAYA'S PROPERTY</h1>
-        <p class="tagline"><%= isEn ? "Unit Details" : "تفاصيل الوحدة" %></p>
+        <p class="tagline"><%= isEn ? "Unit" : "الوحدة" %></p>
       </div>
       <div class="toolbar">
         <a class="btn btn-ghost" href="/properties/<%= property.id %>?lang=<%= isEn ? 'ar' : 'en' %>"><%= isEn ? "العربية" : "English" %></a>
-        <a class="btn btn-dark" href="/?lang=<%= lang %>"><%= isEn ? "Back to list" : "العودة للقائمة" %></a>
+        <a class="btn btn-dark" href="/?lang=<%= lang %>"><%= isEn ? "Back" : "رجوع" %></a>
       </div>
     </header>
 
     <main class="page">
       <section class="panel">
-        <div class="row">
-          <h2><%= property.name %> - <%= isEn ? "Code" : "كود" %> <%= property.code %></h2>
+        <div class="row unit-head">
+          <div>
+            <h2><%= property.name %></h2>
+            <p class="unit-meta">
+              <%= isEn ? "Unit ID" : "رقم الوحدة" %> <strong><%= property.id %></strong>
+              · <%= isEn ? "Apt. no." : "رقم الشقه" %> <strong><%= property.code %></strong>
+              · <%= typeLabel(property.type) %>
+            </p>
+          </div>
           <% if (user) { %>
-          <button class="btn btn-primary" id="toggleEdit"><%= isEn ? "Edit Unit" : "تعديل الوحدة" %></button>
+          <button class="btn btn-primary" id="toggleEdit"><%= isEn ? "Edit" : "تعديل" %></button>
           <% } else { %>
           <a class="btn btn-primary" href="/login?lang=<%= lang %>"><%= isEn ? "Sign in to edit" : "تسجيل الدخول للتعديل" %></a>
           <% } %>
@@ -39,30 +52,32 @@
 
         <% if (user) { %>
         <div id="editPanel" class="hidden">
-          <form id="editForm" class="form-grid" method="post" action="/properties/<%= property.id %>?lang=<%= lang %>">
-            <label><%= isEn ? "Unit Name" : "اسم الوحدة" %></label>
+          <form id="editForm" class="form-grid" method="post" action="/properties/<%= property.id %>?lang=<%= lang %>" accept-charset="UTF-8">
+            <label><%= isEn ? "Name" : "الاسم" %></label>
             <input name="name" value="<%= property.name %>" required />
-            <label><%= isEn ? "Code" : "كود الوحدة" %></label>
+            <label><%= isEn ? "Apt. number" : "رقم الشقه" %></label>
             <input name="code" type="number" value="<%= property.code %>" required />
             <label><%= isEn ? "Type" : "النوع" %></label>
             <select name="type">
-              <option value="house" <%= property.type === "house" ? "selected" : "" %>><%= isEn ? "House" : "منزل" %></option>
+              <option value="apartment" <%= property.type === "apartment" || property.type === "house" ? "selected" : "" %>><%= isEn ? "Apartment" : "شقة" %></option>
               <option value="duplex" <%= property.type === "duplex" ? "selected" : "" %>><%= isEn ? "Duplex" : "دوبلكس" %></option>
+              <option value="villa" <%= property.type === "villa" ? "selected" : "" %>><%= isEn ? "Villa" : "فيلا" %></option>
             </select>
-            <button class="btn btn-primary" type="submit"><%= isEn ? "Save Changes" : "حفظ التعديلات" %></button>
+            <button class="btn btn-primary" type="submit"><%= isEn ? "Save" : "حفظ" %></button>
           </form>
           <form
             class="form-grid delete-unit-form"
             method="post"
             action="/properties/<%= property.id %>/delete?lang=<%= lang %>"
+            accept-charset="UTF-8"
             onsubmit="return confirm('<%= isEn ? "Delete this unit and all its bookings?" : "حذف هذه الوحدة وجميع حجوزاتها؟" %>');"
           >
-            <button class="btn btn-danger" type="submit"><%= isEn ? "Delete Unit" : "حذف الوحدة" %></button>
+            <button class="btn btn-danger" type="submit"><%= isEn ? "Delete" : "حذف" %></button>
           </form>
         </div>
         <% } %>
 
-        <h3><%= isEn ? "Bookings Details" : "تفاصيل الحجوزات" %></h3>
+        <h3><%= isEn ? "Bookings" : "الحجوزات" %></h3>
         <div class="table-wrap">
         <table>
           <thead>
@@ -96,7 +111,7 @@
             <% if (user) { %>
             <tr id="booking-edit-<%= booking.id %>" class="hidden">
               <td colspan="6">
-                <form class="form-grid" method="post" action="/properties/<%= property.id %>/bookings/<%= booking.id %>?lang=<%= lang %>">
+                <form class="form-grid" method="post" action="/properties/<%= property.id %>/bookings/<%= booking.id %>?lang=<%= lang %>" accept-charset="UTF-8">
                   <label><%= isEn ? "Client Name" : "اسم العميل" %></label>
                   <input name="client_name" value="<%= booking.client_name %>" required />
                   <label><%= isEn ? "Staff Name" : "الموظف المسؤول" %></label>
@@ -123,7 +138,7 @@
 
         <% if (user) { %>
         <h3><%= isEn ? "Add Booking" : "إضافة حجز جديد" %></h3>
-        <form class="form-grid" method="post" action="/properties/<%= property.id %>/bookings?lang=<%= lang %>">
+        <form class="form-grid" method="post" action="/properties/<%= property.id %>/bookings?lang=<%= lang %>" accept-charset="UTF-8">
           <label><%= isEn ? "Client Name" : "اسم العميل" %></label>
           <input name="client_name" required />
           <label><%= isEn ? "Staff Name" : "الموظف المسؤول" %></label>

@@ -23,7 +23,7 @@
         <p class="error"><%= error %></p>
         <% } %>
 
-        <form method="post" action="/login?lang=<%= lang %>" class="form-grid">
+        <form method="post" action="/login?lang=<%= lang %>" class="form-grid" accept-charset="UTF-8">
           <label><%= isEn ? "Email" : "البريد الإلكتروني" %></label>
           <input type="email" name="email" required />
           <label><%= isEn ? "Password" : "كلمة المرور" %></label>

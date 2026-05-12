@@ -34,7 +34,10 @@ body {
   padding: 16px;
 }
 .panel-head p { margin-top: 8px; color: #52627a; }
+.unit-meta { margin: 8px 0 0; color: #52627a; font-size: 0.95rem; line-height: 1.45; }
+.unit-meta strong { color: #13233a; }
 .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.row.unit-head { align-items: flex-start; }
 .table-wrap {
   width: 100%;
   overflow-x: auto;

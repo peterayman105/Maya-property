@@ -23,6 +23,8 @@ const { requireAuth } = require("./middleware/auth");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const PROPERTY_TYPES = new Set(["apartment", "duplex", "villa"]);
+
 async function hasBookingOverlap({ propertyId, startDate, endDate, excludeBookingId = null }) {
   return findOverlappingBooking({ propertyId, startDate, endDate, excludeBookingId });
 }
@@ -97,10 +99,18 @@ app.post("/properties", requireAuth, async (req, res) => {
   const lang = req.query.lang === "en" ? "en" : "ar";
   const { name, code, type } = req.body;
 
-  if (!name || !code || !type) {
+  if (!name || code === undefined || code === "" || !type || !PROPERTY_TYPES.has(type)) {
     return res.redirect(
       `/?lang=${lang}&error=${encodeURIComponent(
-        lang === "en" ? "All property fields are required." : "كل بيانات الوحدة مطلوبة."
+        lang === "en" ? "Fill name, apartment number, and unit type." : "أدخل الاسم ورقم الشقه ونوع الوحدة."
+      )}`
+    );
+  }
+
+  if (!Number.isFinite(Number(code))) {
+    return res.redirect(
+      `/?lang=${lang}&error=${encodeURIComponent(
+        lang === "en" ? "Apartment number must be a valid number." : "رقم الشقه يجب أن يكون رقماً صحيحاً."
       )}`
     );
   }
@@ -116,7 +126,7 @@ app.post("/properties", requireAuth, async (req, res) => {
     if (String(error.message || "").includes("duplicate key")) {
       return res.redirect(
         `/?lang=${lang}&error=${encodeURIComponent(
-          lang === "en" ? "Unit code already exists." : "كود الوحدة مستخدم بالفعل."
+          lang === "en" ? "That apartment number is already used." : "رقم الشقه مستخدم مسبقاً."
         )}`
       );
     }
@@ -151,7 +161,32 @@ app.get("/properties/:id", async (req, res) => {
 app.post("/properties/:id", requireAuth, async (req, res) => {
   const lang = req.query.lang === "en" ? "en" : "ar";
   const { name, code, type } = req.body;
-  await updateProperty({ id: Number(req.params.id), name, code: Number(code), type });
+  if (!name || code === undefined || code === "" || !type || !PROPERTY_TYPES.has(type)) {
+    return res.redirect(
+      `/properties/${req.params.id}?lang=${lang}&error=${encodeURIComponent(
+        lang === "en" ? "Check name, apartment number, and type." : "تحقق من الاسم ورقم الشقه والنوع."
+      )}`
+    );
+  }
+  if (!Number.isFinite(Number(code))) {
+    return res.redirect(
+      `/properties/${req.params.id}?lang=${lang}&error=${encodeURIComponent(
+        lang === "en" ? "Apartment number must be a valid number." : "رقم الشقه يجب أن يكون رقماً صحيحاً."
+      )}`
+    );
+  }
+  try {
+    await updateProperty({ id: Number(req.params.id), name, code: Number(code), type });
+  } catch (error) {
+    if (String(error.message || "").includes("duplicate key")) {
+      return res.redirect(
+        `/properties/${req.params.id}?lang=${lang}&error=${encodeURIComponent(
+          lang === "en" ? "That apartment number is already used." : "رقم الشقه مستخدم مسبقاً."
+        )}`
+      );
+    }
+    throw error;
+  }
   return res.redirect(`/properties/${req.params.id}?lang=${lang}`);
 });
 
