@@ -24,6 +24,61 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const PROPERTY_TYPES = new Set(["apartment", "duplex", "villa"]);
+const BOOKING_STATUSES = new Set(["booked", "confirmed", "cancelled"]);
+
+function parsePropertyIdParam(param) {
+  const n = Number(param);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+function parseBookingBody(body) {
+  return {
+    client_name: String(body.client_name ?? "").trim(),
+    staff_name: String(body.staff_name ?? "").trim(),
+    start_date: String(body.start_date ?? "").trim(),
+    end_date: String(body.end_date ?? "").trim(),
+    status: String(body.status ?? "").trim().toLowerCase()
+  };
+}
+
+function normalizeForPgTimestamp(s) {
+  let t = String(s).trim();
+  if (!t) return t;
+  if (!t.includes("T") && /^\d{4}-\d{2}-\d{2}$/.test(t)) return `${t}T00:00:00`;
+  if (t.includes(" ") && !t.includes("T")) t = t.replace(" ", "T");
+  return t;
+}
+
+function toPgTimestamp(s) {
+  const n = normalizeForPgTimestamp(s);
+  if (!n) return n;
+  return n.length === 16 ? `${n}:00` : n;
+}
+
+function isValidForPgTimestamp(s) {
+  const out = toPgTimestamp(s);
+  if (!out) return false;
+  return !Number.isNaN(Date.parse(out));
+}
+
+function validateBookingFields(b, lang) {
+  const isEn = lang === "en";
+  if (!b.client_name || !b.staff_name) {
+    return isEn ? "Client and staff names are required." : "اسم العميل وموظف الاستقبال مطلوبان.";
+  }
+  if (!BOOKING_STATUSES.has(b.status)) {
+    return isEn ? "Pick a valid booking status." : "اختر حالة حجز صالحة.";
+  }
+  if (!isValidForPgTimestamp(b.start_date) || !isValidForPgTimestamp(b.end_date)) {
+    return isEn ? "Start and end must be valid dates." : "أدخل تاريخي بدء وانتهاء صالحين.";
+  }
+  const t0 = Date.parse(toPgTimestamp(b.start_date));
+  const t1 = Date.parse(toPgTimestamp(b.end_date));
+  if (!(t0 < t1)) {
+    return isEn ? "End must be after start." : "يجب أن يكون الانتهاء بعد البدء.";
+  }
+  return null;
+}
 
 async function hasBookingOverlap({ propertyId, startDate, endDate, excludeBookingId = null }) {
   return findOverlappingBooking({ propertyId, startDate, endDate, excludeBookingId });
@@ -202,40 +257,59 @@ app.post("/properties/:id/delete", requireAuth, async (req, res) => {
 
 app.post("/properties/:id/bookings", requireAuth, async (req, res) => {
   const lang = req.query.lang === "en" ? "en" : "ar";
-  const { client_name, staff_name, start_date, end_date, status } = req.body;
-  if (!start_date || !end_date || start_date > end_date) {
+  const propertyId = parsePropertyIdParam(req.params.id);
+  if (!propertyId) {
+    return res.status(400).send("Bad request");
+  }
+
+  const b = parseBookingBody(req.body);
+  const fieldError = validateBookingFields(b, lang);
+  if (fieldError) {
     return res.redirect(
-      `/properties/${req.params.id}?lang=${lang}&error=${encodeURIComponent(
-        lang === "en" ? "Invalid booking date range." : "نطاق التواريخ غير صالح."
-      )}`
+      `/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(fieldError)}`
     );
   }
 
-  const overlap = await hasBookingOverlap({
-    propertyId: Number(req.params.id),
-    startDate: start_date,
-    endDate: end_date
-  });
-  if (overlap) {
+  const startTs = toPgTimestamp(b.start_date);
+  const endTs = toPgTimestamp(b.end_date);
+
+  try {
+    const overlap = await hasBookingOverlap({
+      propertyId,
+      startDate: startTs,
+      endDate: endTs
+    });
+    if (overlap) {
+      return res.redirect(
+        `/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(
+          lang === "en"
+            ? "Booking dates overlap with an existing booking."
+            : "توجد مواعيد متداخلة مع حجز آخر."
+        )}`
+      );
+    }
+
+    await createBooking({
+      propertyId,
+      clientName: b.client_name,
+      staffName: b.staff_name,
+      startDate: startTs,
+      endDate: endTs,
+      status: b.status
+    });
+  } catch (err) {
+    console.error("Create booking failed:", err);
     return res.redirect(
-      `/properties/${req.params.id}?lang=${lang}&error=${encodeURIComponent(
+      `/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(
         lang === "en"
-          ? "Booking dates overlap with an existing booking."
-          : "توجد مواعيد متداخلة مع حجز آخر."
+          ? "Could not save the booking. Check dates and try again."
+          : "تعذر حفظ الحجز. تحقق من التواريخ وحاول مرة أخرى."
       )}`
     );
   }
 
-  await createBooking({
-    propertyId: Number(req.params.id),
-    clientName: client_name,
-    staffName: staff_name,
-    startDate: start_date,
-    endDate: end_date,
-    status
-  });
   return res.redirect(
-    `/properties/${req.params.id}?lang=${lang}&success=${encodeURIComponent(
+    `/properties/${propertyId}?lang=${lang}&success=${encodeURIComponent(
       lang === "en" ? "Booking added successfully." : "تمت إضافة الحجز بنجاح."
     )}`
   );
@@ -243,43 +317,59 @@ app.post("/properties/:id/bookings", requireAuth, async (req, res) => {
 
 app.post("/properties/:id/bookings/:bookingId", requireAuth, async (req, res) => {
   const lang = req.query.lang === "en" ? "en" : "ar";
-  const { client_name, staff_name, start_date, end_date, status } = req.body;
   const bookingId = Number(req.params.bookingId);
-  const propertyId = Number(req.params.id);
+  const propertyId = parsePropertyIdParam(req.params.id);
+  if (!propertyId || !Number.isInteger(bookingId) || bookingId < 1) {
+    return res.status(400).send("Bad request");
+  }
 
-  if (!start_date || !end_date || start_date > end_date) {
+  const b = parseBookingBody(req.body);
+  const fieldError = validateBookingFields(b, lang);
+  if (fieldError) {
     return res.redirect(
-      `/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(
-        lang === "en" ? "Invalid booking date range." : "نطاق التواريخ غير صالح."
-      )}`
+      `/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(fieldError)}`
     );
   }
 
-  const overlap = await hasBookingOverlap({
-    propertyId,
-    startDate: start_date,
-    endDate: end_date,
-    excludeBookingId: bookingId
-  });
-  if (overlap) {
+  const startTs = toPgTimestamp(b.start_date);
+  const endTs = toPgTimestamp(b.end_date);
+
+  try {
+    const overlap = await hasBookingOverlap({
+      propertyId,
+      startDate: startTs,
+      endDate: endTs,
+      excludeBookingId: bookingId
+    });
+    if (overlap) {
+      return res.redirect(
+        `/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(
+          lang === "en"
+            ? "Booking dates overlap with an existing booking."
+            : "توجد مواعيد متداخلة مع حجز آخر."
+        )}`
+      );
+    }
+
+    await updateBooking({
+      bookingId,
+      propertyId,
+      clientName: b.client_name,
+      staffName: b.staff_name,
+      startDate: startTs,
+      endDate: endTs,
+      status: b.status
+    });
+  } catch (err) {
+    console.error("Update booking failed:", err);
     return res.redirect(
       `/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(
         lang === "en"
-          ? "Booking dates overlap with an existing booking."
-          : "توجد مواعيد متداخلة مع حجز آخر."
+          ? "Could not update the booking. Check dates and try again."
+          : "تعذر تحديث الحجز. تحقق من التواريخ وحاول مرة أخرى."
       )}`
     );
   }
-
-  await updateBooking({
-    bookingId,
-    propertyId,
-    clientName: client_name,
-    staffName: staff_name,
-    startDate: start_date,
-    endDate: end_date,
-    status
-  });
 
   return res.redirect(
     `/properties/${propertyId}?lang=${lang}&success=${encodeURIComponent(
