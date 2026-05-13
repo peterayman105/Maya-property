@@ -55,6 +55,8 @@
           <input name="name" required />
           <label><%= isEn ? "Apt. number" : "رقم الشقه" %></label>
           <input name="code" type="number" required />
+          <label><%= isEn ? "Rooms" : "عدد الغرف" %></label>
+          <input name="rooms" type="number" min="1" max="500" value="3" required />
           <label><%= isEn ? "Type" : "النوع" %></label>
           <select name="type" required>
             <option value="apartment"><%= isEn ? "Apartment" : "شقة" %></option>
@@ -73,6 +75,7 @@
               <th><%= isEn ? "Details" : "التفاصيل" %></th>
               <th><%= isEn ? "Bookings" : "الحجوزات" %></th>
               <th><%= isEn ? "Apt. no." : "رقم الشقه" %></th>
+              <th><%= isEn ? "Rooms" : "عدد الغرف" %></th>
               <th><%= isEn ? "Name" : "الاسم" %></th>
               <th><%= isEn ? "Type" : "النوع" %></th>
               <th><%= isEn ? "Status" : "الحالة" %></th>
@@ -85,6 +88,7 @@
               <td><a class="btn btn-mini" href="/properties/<%= property.id %>?lang=<%= lang %>"><%= isEn ? "Open" : "فتح" %></a></td>
               <td><%= property.booked_count %></td>
               <td><%= property.code %></td>
+              <td><%= property.rooms != null ? property.rooms : 1 %></td>
               <td><%= property.name %></td>
               <td><%= typeLabel(property.type) %></td>
               <td><span class="<%= property.booked_count > 0 ? 'status booked' : 'status free' %>"><%= property.booked_count > 0 ? (isEn ? "Booked" : "محجوز") : (isEn ? "Available" : "غير محجوز") %></span></td>

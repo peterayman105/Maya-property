@@ -7,8 +7,7 @@ if (!process.env.DATABASE_URL) {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-  options: "-c client_encoding=UTF8"
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
 });
 
 async function query(text, params = []) {
@@ -24,7 +23,7 @@ async function getUserByEmail(email) {
 async function getPropertiesWithBookingCount() {
   const result = await query(
     `SELECT
-      p.id, p.code, p.name, p.type,
+      p.id, p.code, p.name, p.type, p.rooms,
       COUNT(CASE WHEN b.status IN ('booked', 'confirmed') THEN 1 END)::int AS booked_count
     FROM properties p
     LEFT JOIN bookings b ON b.property_id = p.id
@@ -55,19 +54,20 @@ async function getBookingsByPropertyId(propertyId) {
   return result.rows;
 }
 
-async function updateProperty({ id, name, code, type }) {
-  await query("UPDATE properties SET name = $1, code = $2, type = $3 WHERE id = $4", [
+async function updateProperty({ id, name, code, type, rooms }) {
+  await query("UPDATE properties SET name = $1, code = $2, type = $3, rooms = $4 WHERE id = $5", [
     name,
     code,
     type,
+    rooms,
     id
   ]);
 }
 
-async function createProperty({ code, name, type }) {
+async function createProperty({ code, name, type, rooms }) {
   await query(
-    "INSERT INTO properties (code, name, type, created_at) VALUES ($1, $2, $3, NOW())",
-    [code, name, type]
+    "INSERT INTO properties (code, name, type, rooms, created_at) VALUES ($1, $2, $3, $4, NOW())",
+    [code, name, type, rooms]
   );
 }
 
@@ -97,8 +97,8 @@ async function findOverlappingBooking({ propertyId, startDate, endDate, excludeB
 
 async function createBooking({ propertyId, clientName, staffName, startDate, endDate, status }) {
   await query(
-    `INSERT INTO bookings (property_id, client_name, staff_name, start_date, end_date, status)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
+    `INSERT INTO bookings (property_id, client_name, staff_name, start_date, end_date, status, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
     [propertyId, clientName, staffName, startDate, endDate, status]
   );
 }
@@ -135,6 +135,7 @@ async function bootstrapDatabase() {
       code INTEGER NOT NULL UNIQUE,
       name TEXT NOT NULL,
       type TEXT NOT NULL CHECK (type IN ('apartment', 'duplex', 'villa')),
+      rooms INTEGER NOT NULL DEFAULT 1,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
 
@@ -176,6 +177,19 @@ async function bootstrapDatabase() {
     $$;
   `);
 
+  await query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'properties' AND column_name = 'rooms'
+      ) THEN
+        ALTER TABLE properties ADD COLUMN rooms INTEGER NOT NULL DEFAULT 1;
+      END IF;
+    END
+    $$;
+  `);
+
   await query("ALTER TABLE properties DROP CONSTRAINT IF EXISTS properties_type_check");
   await query("UPDATE properties SET type = 'apartment' WHERE type = 'house'");
   await query(
@@ -188,6 +202,7 @@ async function bootstrapDatabase() {
   await query("ALTER TABLE properties ALTER COLUMN created_at SET DEFAULT NOW()");
   await query("ALTER TABLE bookings ALTER COLUMN start_date TYPE TIMESTAMP USING start_date::timestamp");
   await query("ALTER TABLE bookings ALTER COLUMN end_date TYPE TIMESTAMP USING end_date::timestamp");
+  await query("ALTER TABLE bookings ALTER COLUMN created_at SET DEFAULT NOW()");
 
   const adminName = process.env.ADMIN_NAME || "مايا";
   const adminEmail = process.env.ADMIN_EMAIL || "admin@maya-property.com";
@@ -205,17 +220,18 @@ async function bootstrapDatabase() {
   if (propertiesCount.rows[0].count === 0) {
     const now = new Date().toISOString().slice(0, 10);
     const p1 = await query(
-      "INSERT INTO properties (code, name, type, created_at) VALUES ($1, $2, $3, $4) RETURNING id",
-      [127, "دوبلكس الزملاك جنينة الأسماك", "duplex", now]
+      "INSERT INTO properties (code, name, type, rooms, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+      [127, "دوبلكس الزملاك جنينة الأسماك", "duplex", 5, now]
     );
     const p2 = await query(
-      "INSERT INTO properties (code, name, type, created_at) VALUES ($1, $2, $3, $4) RETURNING id",
-      [124, "دوبلكس ايستاون H1-34-23 التجمع الخامس", "duplex", now]
+      "INSERT INTO properties (code, name, type, rooms, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+      [124, "دوبلكس ايستاون H1-34-23 التجمع الخامس", "duplex", 4, now]
     );
-    await query("INSERT INTO properties (code, name, type, created_at) VALUES ($1, $2, $3, $4)", [
+    await query("INSERT INTO properties (code, name, type, rooms, created_at) VALUES ($1, $2, $3, $4, $5)", [
       130,
       "فيلا مستقلة - الشيخ زايد",
       "villa",
+      6,
       now
     ]);
 

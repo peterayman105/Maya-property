@@ -19,6 +19,11 @@ const {
   updateBooking
 } = require("./config/db");
 const { requireAuth } = require("./middleware/auth");
+const {
+  datetimeLocalToPgTimestamp,
+  isValidPgBookingInput,
+  bookingRangeOrderOk
+} = require("./booking-time");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -41,26 +46,6 @@ function parseBookingBody(body) {
   };
 }
 
-function normalizeForPgTimestamp(s) {
-  let t = String(s).trim();
-  if (!t) return t;
-  if (!t.includes("T") && /^\d{4}-\d{2}-\d{2}$/.test(t)) return `${t}T00:00:00`;
-  if (t.includes(" ") && !t.includes("T")) t = t.replace(" ", "T");
-  return t;
-}
-
-function toPgTimestamp(s) {
-  const n = normalizeForPgTimestamp(s);
-  if (!n) return n;
-  return n.length === 16 ? `${n}:00` : n;
-}
-
-function isValidForPgTimestamp(s) {
-  const out = toPgTimestamp(s);
-  if (!out) return false;
-  return !Number.isNaN(Date.parse(out));
-}
-
 function validateBookingFields(b, lang) {
   const isEn = lang === "en";
   if (!b.client_name || !b.staff_name) {
@@ -69,15 +54,40 @@ function validateBookingFields(b, lang) {
   if (!BOOKING_STATUSES.has(b.status)) {
     return isEn ? "Pick a valid booking status." : "اختر حالة حجز صالحة.";
   }
-  if (!isValidForPgTimestamp(b.start_date) || !isValidForPgTimestamp(b.end_date)) {
+  if (!isValidPgBookingInput(b.start_date) || !isValidPgBookingInput(b.end_date)) {
     return isEn ? "Start and end must be valid dates." : "أدخل تاريخي بدء وانتهاء صالحين.";
   }
-  const t0 = Date.parse(toPgTimestamp(b.start_date));
-  const t1 = Date.parse(toPgTimestamp(b.end_date));
-  if (!(t0 < t1)) {
+  let startStr;
+  let endStr;
+  try {
+    startStr = datetimeLocalToPgTimestamp(b.start_date);
+    endStr = datetimeLocalToPgTimestamp(b.end_date);
+  } catch {
+    return isEn ? "Start and end must be valid dates." : "أدخل تاريخي بدء وانتهاء صالحين.";
+  }
+  if (!bookingRangeOrderOk(startStr, endStr)) {
     return isEn ? "End must be after start." : "يجب أن يكون الانتهاء بعد البدء.";
   }
   return null;
+}
+
+function bookingTimesForDb(b) {
+  return {
+    start: datetimeLocalToPgTimestamp(b.start_date),
+    end: datetimeLocalToPgTimestamp(b.end_date)
+  };
+}
+
+function parseRoomsField(raw, lang) {
+  const v = String(raw ?? "").trim();
+  const n = Number(v === "" ? "1" : v);
+  const isEn = lang === "en";
+  if (!Number.isInteger(n) || n < 1 || n > 500) {
+    return {
+      error: isEn ? "Rooms must be a whole number from 1 to 500." : "عدد الغرف رقم صحيح من 1 إلى 500."
+    };
+  }
+  return { rooms: n };
 }
 
 async function hasBookingOverlap({ propertyId, startDate, endDate, excludeBookingId = null }) {
@@ -170,8 +180,13 @@ app.post("/properties", requireAuth, async (req, res) => {
     );
   }
 
+  const roomsParsed = parseRoomsField(req.body.rooms, lang);
+  if (roomsParsed.error) {
+    return res.redirect(`/?lang=${lang}&error=${encodeURIComponent(roomsParsed.error)}`);
+  }
+
   try {
-    await createProperty({ name, code: Number(code), type });
+    await createProperty({ name, code: Number(code), type, rooms: roomsParsed.rooms });
     return res.redirect(
       `/?lang=${lang}&success=${encodeURIComponent(
         lang === "en" ? "New unit added successfully." : "تمت إضافة الوحدة بنجاح."
@@ -230,8 +245,22 @@ app.post("/properties/:id", requireAuth, async (req, res) => {
       )}`
     );
   }
+
+  const roomsParsed = parseRoomsField(req.body.rooms, lang);
+  if (roomsParsed.error) {
+    return res.redirect(
+      `/properties/${req.params.id}?lang=${lang}&error=${encodeURIComponent(roomsParsed.error)}`
+    );
+  }
+
   try {
-    await updateProperty({ id: Number(req.params.id), name, code: Number(code), type });
+    await updateProperty({
+      id: Number(req.params.id),
+      name,
+      code: Number(code),
+      type,
+      rooms: roomsParsed.rooms
+    });
   } catch (error) {
     if (String(error.message || "").includes("duplicate key")) {
       return res.redirect(
@@ -270,14 +299,13 @@ app.post("/properties/:id/bookings", requireAuth, async (req, res) => {
     );
   }
 
-  const startTs = toPgTimestamp(b.start_date);
-  const endTs = toPgTimestamp(b.end_date);
+  const { start: startStr, end: endStr } = bookingTimesForDb(b);
 
   try {
     const overlap = await hasBookingOverlap({
       propertyId,
-      startDate: startTs,
-      endDate: endTs
+      startDate: startStr,
+      endDate: endStr
     });
     if (overlap) {
       return res.redirect(
@@ -293,19 +321,37 @@ app.post("/properties/:id/bookings", requireAuth, async (req, res) => {
       propertyId,
       clientName: b.client_name,
       staffName: b.staff_name,
-      startDate: startTs,
-      endDate: endTs,
+      startDate: startStr,
+      endDate: endStr,
       status: b.status
     });
   } catch (err) {
-    console.error("Create booking failed:", err);
-    return res.redirect(
-      `/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(
-        lang === "en"
-          ? "Could not save the booking. Check dates and try again."
-          : "تعذر حفظ الحجز. تحقق من التواريخ وحاول مرة أخرى."
-      )}`
-    );
+    console.error("Create booking failed:", err && err.stack ? err.stack : err);
+    const isEn = lang === "en";
+    let msg = isEn
+      ? "Could not save the booking. Check dates and try again."
+      : "تعذر حفظ الحجز. تحقق من التواريخ وحاول مرة أخرى.";
+    if (err && err.code === "22007") {
+      msg = isEn ? "Invalid date or time." : "تاريخ أو وقت غير صالح.";
+    }
+    if (err && err.code === "23514") {
+      msg = isEn ? "Booking data did not pass validation." : "بيانات الحجز لم تجتز التحقق.";
+    }
+    if (
+      err &&
+      (err.code === "42P05" ||
+        err.code === "26000" ||
+        err.code === "08P01" ||
+        /prepared statement/i.test(String(err.message || "")))
+    ) {
+      msg = isEn
+        ? "Database pool error: use Supabase Session mode or Direct connection (port 5432), not Transaction pooler (6543), in DATABASE_URL."
+        : "خطأ في اتصال قاعدة البيانات: استخدم وضع Session أو الاتصال المباشر (5432) في رابط Supabase وليس Transaction pooler (6543).";
+    }
+    if (process.env.NODE_ENV !== "production" && err && err.message) {
+      msg += ` [${err.code || "err"}]`;
+    }
+    return res.redirect(`/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(msg)}`);
   }
 
   return res.redirect(
@@ -331,14 +377,13 @@ app.post("/properties/:id/bookings/:bookingId", requireAuth, async (req, res) =>
     );
   }
 
-  const startTs = toPgTimestamp(b.start_date);
-  const endTs = toPgTimestamp(b.end_date);
+  const { start: startStr, end: endStr } = bookingTimesForDb(b);
 
   try {
     const overlap = await hasBookingOverlap({
       propertyId,
-      startDate: startTs,
-      endDate: endTs,
+      startDate: startStr,
+      endDate: endStr,
       excludeBookingId: bookingId
     });
     if (overlap) {
@@ -356,19 +401,37 @@ app.post("/properties/:id/bookings/:bookingId", requireAuth, async (req, res) =>
       propertyId,
       clientName: b.client_name,
       staffName: b.staff_name,
-      startDate: startTs,
-      endDate: endTs,
+      startDate: startStr,
+      endDate: endStr,
       status: b.status
     });
   } catch (err) {
-    console.error("Update booking failed:", err);
-    return res.redirect(
-      `/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(
-        lang === "en"
-          ? "Could not update the booking. Check dates and try again."
-          : "تعذر تحديث الحجز. تحقق من التواريخ وحاول مرة أخرى."
-      )}`
-    );
+    console.error("Update booking failed:", err && err.stack ? err.stack : err);
+    const isEn = lang === "en";
+    let msg = isEn
+      ? "Could not update the booking. Check dates and try again."
+      : "تعذر تحديث الحجز. تحقق من التواريخ وحاول مرة أخرى.";
+    if (err && err.code === "22007") {
+      msg = isEn ? "Invalid date or time." : "تاريخ أو وقت غير صالح.";
+    }
+    if (err && err.code === "23514") {
+      msg = isEn ? "Booking data did not pass validation." : "بيانات الحجز لم تجتز التحقق.";
+    }
+    if (
+      err &&
+      (err.code === "42P05" ||
+        err.code === "26000" ||
+        err.code === "08P01" ||
+        /prepared statement/i.test(String(err.message || "")))
+    ) {
+      msg = isEn
+        ? "Database pool error: use Supabase Session mode or Direct connection (port 5432), not Transaction pooler (6543), in DATABASE_URL."
+        : "خطأ في اتصال قاعدة البيانات: استخدم وضع Session أو الاتصال المباشر (5432) في رابط Supabase وليس Transaction pooler (6543).";
+    }
+    if (process.env.NODE_ENV !== "production" && err && err.message) {
+      msg += ` [${err.code || "err"}]`;
+    }
+    return res.redirect(`/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(msg)}`);
   }
 
   return res.redirect(
