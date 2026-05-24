@@ -1,5 +1,7 @@
 const express = require("express");
+const fs = require("fs");
 const path = require("path");
+const ejs = require("ejs");
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 const session = require("express-session");
 const PgSession = require("connect-pg-simple")(session);
@@ -8,12 +10,14 @@ const {
   pool,
   bootstrapDatabase,
   getUserByEmail,
-  getPropertiesWithBookingCount,
+  getPropertiesList,
+  getActiveBookingsForAvailability,
   getPropertyById,
   getBookingsByPropertyId,
   updateProperty,
   createProperty,
   deleteProperty,
+  getAllBookingsForStats,
   findOverlappingBooking,
   createBooking,
   updateBooking
@@ -24,6 +28,9 @@ const {
   isValidPgBookingInput,
   bookingRangeOrderOk
 } = require("./booking-time");
+const { attachAvailabilityToProperties, computeUnitAvailability } = require("./availability");
+const { buildSalesDashboard } = require("./sales-statistics");
+const { typeLabel, formatPrice } = require("./view-helpers");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -42,8 +49,18 @@ function parseBookingBody(body) {
     staff_name: String(body.staff_name ?? "").trim(),
     start_date: String(body.start_date ?? "").trim(),
     end_date: String(body.end_date ?? "").trim(),
-    status: String(body.status ?? "").trim().toLowerCase()
+    status: String(body.status ?? "").trim().toLowerCase(),
+    amount_paid: String(body.amount_paid ?? "").trim()
   };
+}
+
+function parseAmountPaid(raw, lang) {
+  const isEn = lang === "en";
+  const n = Number(String(raw ?? "").replace(/,/g, ""));
+  if (!Number.isFinite(n) || n < 0) {
+    return { error: isEn ? "Enter a valid amount paid (0 or more)." : "أدخل مبلغاً مدفوعاً صحيحاً (0 أو أكثر)." };
+  }
+  return { amountPaid: Math.round(n * 100) / 100 };
 }
 
 function validateBookingFields(b, lang) {
@@ -71,6 +88,16 @@ function validateBookingFields(b, lang) {
   return null;
 }
 
+function validateBookingAmount(b, lang) {
+  const isEn = lang === "en";
+  const parsed = parseAmountPaid(b.amount_paid, lang);
+  if (parsed.error) return parsed.error;
+  if (b.status !== "cancelled" && parsed.amountPaid <= 0) {
+    return isEn ? "Amount paid is required for active bookings." : "المبلغ المدفوع مطلوب للحجوزات النشطة.";
+  }
+  return null;
+}
+
 function bookingTimesForDb(b) {
   return {
     start: datetimeLocalToPgTimestamp(b.start_date),
@@ -90,9 +117,40 @@ function parseRoomsField(raw, lang) {
   return { rooms: n };
 }
 
+function parsePricesField(body, lang) {
+  const isEn = lang === "en";
+  const daily = Number(body.price_daily);
+  const monthly = Number(body.price_monthly);
+  const yearly = Number(body.price_yearly);
+  if (![daily, monthly, yearly].every((n) => Number.isFinite(n) && n >= 0)) {
+    return { error: isEn ? "Enter valid prices (0 or more)." : "أدخل أسعاراً صحيحة (0 أو أكثر)." };
+  }
+  return { priceDaily: daily, priceMonthly: monthly, priceYearly: yearly };
+}
+
+function viewHelpers(lang) {
+  return {
+    typeLabel: (t) => typeLabel(t, lang),
+    formatPrice: (n) => formatPrice(n, lang)
+  };
+}
+
 async function hasBookingOverlap({ propertyId, startDate, endDate, excludeBookingId = null }) {
   return findOverlappingBooking({ propertyId, startDate, endDate, excludeBookingId });
 }
+
+function readViewSource(filePath) {
+  const buf = fs.readFileSync(filePath);
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
+    return buf.toString("utf16le").replace(/^\uFEFF/, "");
+  }
+  if (buf.length >= 4 && buf[0] === 0x3c && buf[1] === 0x00) {
+    return buf.toString("utf16le").replace(/^\uFEFF/, "");
+  }
+  return buf.toString("utf8").replace(/^\uFEFF/, "");
+}
+
+ejs.fileLoader = readViewSource;
 
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
@@ -144,11 +202,29 @@ app.post("/logout", (req, res) => {
   req.session.destroy(() => res.redirect(`/login?lang=${lang}`));
 });
 
+app.get("/accounts", requireAuth, async (req, res) => {
+  const lang = req.query.lang === "en" ? "en" : "ar";
+  const properties = await getPropertiesList();
+  const allBookings = await getAllBookingsForStats();
+  const { rows, summary } = buildSalesDashboard(properties, allBookings, lang);
+
+  return res.render("accounts", {
+    title: "Maya's Property — Accounts",
+    lang,
+    user: req.session.user,
+    rows,
+    summary,
+    h: viewHelpers(lang)
+  });
+});
+
 app.get("/", async (req, res) => {
   const lang = req.query.lang === "en" ? "en" : "ar";
   const error = req.query.error || "";
   const success = req.query.success || "";
-  const properties = await getPropertiesWithBookingCount();
+  const rows = await getPropertiesList();
+  const bookingRows = await getActiveBookingsForAvailability();
+  const properties = attachAvailabilityToProperties(rows, bookingRows, lang);
 
   return res.render("index", {
     title: "Maya's Property",
@@ -156,7 +232,8 @@ app.get("/", async (req, res) => {
     user: req.session.user || null,
     properties,
     error,
-    success
+    success,
+    h: viewHelpers(lang)
   });
 });
 
@@ -185,8 +262,21 @@ app.post("/properties", requireAuth, async (req, res) => {
     return res.redirect(`/?lang=${lang}&error=${encodeURIComponent(roomsParsed.error)}`);
   }
 
+  const pricesParsed = parsePricesField(req.body, lang);
+  if (pricesParsed.error) {
+    return res.redirect(`/?lang=${lang}&error=${encodeURIComponent(pricesParsed.error)}`);
+  }
+
   try {
-    await createProperty({ name, code: Number(code), type, rooms: roomsParsed.rooms });
+    await createProperty({
+      name,
+      code: Number(code),
+      type,
+      rooms: roomsParsed.rooms,
+      priceDaily: pricesParsed.priceDaily,
+      priceMonthly: pricesParsed.priceMonthly,
+      priceYearly: pricesParsed.priceYearly
+    });
     return res.redirect(
       `/?lang=${lang}&success=${encodeURIComponent(
         lang === "en" ? "New unit added successfully." : "تمت إضافة الوحدة بنجاح."
@@ -216,6 +306,7 @@ app.get("/properties/:id", async (req, res) => {
   if (!property) return res.status(404).send("Unit not found.");
 
   const bookings = await getBookingsByPropertyId(Number(req.params.id));
+  const availability = computeUnitAvailability(bookings, lang);
 
   return res.render("property-details", {
     title: "Maya's Property",
@@ -223,8 +314,10 @@ app.get("/properties/:id", async (req, res) => {
     user: req.session.user || null,
     property,
     bookings,
+    availability,
     error,
-    success
+    success,
+    h: viewHelpers(lang)
   });
 });
 
@@ -253,13 +346,23 @@ app.post("/properties/:id", requireAuth, async (req, res) => {
     );
   }
 
+  const pricesParsed = parsePricesField(req.body, lang);
+  if (pricesParsed.error) {
+    return res.redirect(
+      `/properties/${req.params.id}?lang=${lang}&error=${encodeURIComponent(pricesParsed.error)}`
+    );
+  }
+
   try {
     await updateProperty({
       id: Number(req.params.id),
       name,
       code: Number(code),
       type,
-      rooms: roomsParsed.rooms
+      rooms: roomsParsed.rooms,
+      priceDaily: pricesParsed.priceDaily,
+      priceMonthly: pricesParsed.priceMonthly,
+      priceYearly: pricesParsed.priceYearly
     });
   } catch (error) {
     if (String(error.message || "").includes("duplicate key")) {
@@ -292,12 +395,13 @@ app.post("/properties/:id/bookings", requireAuth, async (req, res) => {
   }
 
   const b = parseBookingBody(req.body);
-  const fieldError = validateBookingFields(b, lang);
+  const fieldError = validateBookingFields(b, lang) || validateBookingAmount(b, lang);
   if (fieldError) {
     return res.redirect(
       `/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(fieldError)}`
     );
   }
+  const { amountPaid } = parseAmountPaid(b.amount_paid, lang);
 
   const { start: startStr, end: endStr } = bookingTimesForDb(b);
 
@@ -323,7 +427,8 @@ app.post("/properties/:id/bookings", requireAuth, async (req, res) => {
       staffName: b.staff_name,
       startDate: startStr,
       endDate: endStr,
-      status: b.status
+      status: b.status,
+      amountPaid
     });
   } catch (err) {
     console.error("Create booking failed:", err && err.stack ? err.stack : err);
@@ -370,12 +475,13 @@ app.post("/properties/:id/bookings/:bookingId", requireAuth, async (req, res) =>
   }
 
   const b = parseBookingBody(req.body);
-  const fieldError = validateBookingFields(b, lang);
+  const fieldError = validateBookingFields(b, lang) || validateBookingAmount(b, lang);
   if (fieldError) {
     return res.redirect(
       `/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(fieldError)}`
     );
   }
+  const { amountPaid } = parseAmountPaid(b.amount_paid, lang);
 
   const { start: startStr, end: endStr } = bookingTimesForDb(b);
 
@@ -403,7 +509,8 @@ app.post("/properties/:id/bookings/:bookingId", requireAuth, async (req, res) =>
       staffName: b.staff_name,
       startDate: startStr,
       endDate: endStr,
-      status: b.status
+      status: b.status,
+      amountPaid
     });
   } catch (err) {
     console.error("Update booking failed:", err && err.stack ? err.stack : err);

@@ -10,25 +10,29 @@
     <% const isEn = lang === "en"; %>
     <main class="auth-page">
       <section class="auth-box">
-        <div class="toolbar end">
+        <div class="toolbar end" style="margin-bottom: 0.5rem;">
           <a class="btn btn-ghost" href="/login?lang=<%= isEn ? 'ar' : 'en' %>"><%= isEn ? "العربية" : "English" %></a>
-          <a class="btn btn-dark" href="/?lang=<%= lang %>"><%= isEn ? "Back to viewer" : "العودة للعرض" %></a>
+          <a class="btn btn-dark" href="/?lang=<%= lang %>"><%= isEn ? "Back" : "رجوع" %></a>
         </div>
 
-        <h1 class="brand">MAYA'S PROPERTY</h1>
-        <h2><%= isEn ? "Sign In" : "تسجيل الدخول" %></h2>
-        <p class="tagline"><%= isEn ? "Login is only needed for editing." : "التسجيل مطلوب فقط للتعديل." %></p>
+        <h1 class="brand">Maya's Property</h1>
+        <h2><%= isEn ? "Sign in" : "تسجيل الدخول" %></h2>
+        <p class="tagline">
+          <%= isEn
+            ? "Staff login to edit units, set rates, and manage bookings."
+            : "دخول الموظفين لتعديل الوحدات والأسعار وإدارة الحجوزات." %>
+        </p>
 
         <% if (error) { %>
-        <p class="error"><%= error %></p>
+        <div class="alert alert-error"><%= error %></div>
         <% } %>
 
         <form method="post" action="/login?lang=<%= lang %>" class="form-grid" accept-charset="UTF-8">
           <label><%= isEn ? "Email" : "البريد الإلكتروني" %></label>
-          <input type="email" name="email" required />
+          <input type="email" name="email" required autocomplete="username" />
           <label><%= isEn ? "Password" : "كلمة المرور" %></label>
-          <input type="password" name="password" required />
-          <button type="submit" class="btn btn-primary"><%= isEn ? "Login" : "دخول" %></button>
+          <input type="password" name="password" required autocomplete="current-password" />
+          <button type="submit" class="btn btn-primary btn-block"><%= isEn ? "Sign in" : "دخول" %></button>
         </form>
       </section>
     </main>

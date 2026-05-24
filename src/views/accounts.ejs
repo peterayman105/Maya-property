@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>" dir="<%= lang === 'ar' ? 'rtl' : 'ltr' %>">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/assets/css/style.css" />
+  </head>
+  <body>
+    <% const isEn = lang === "en"; %>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <div>
+          <p class="eyebrow"><%= isEn ? "Sales statistics" : "إحصائيات المبيعات" %></p>
+          <h1 class="brand"><%= isEn ? "Accounts" : "الحسابات" %></h1>
+        </div>
+        <div class="toolbar">
+          <a class="btn btn-ghost" href="/accounts?lang=<%= isEn ? 'ar' : 'en' %>"><%= isEn ? "العربية" : "English" %></a>
+          <span class="chip"><%= isEn ? "Hi" : "مرحباً" %> <%= user.name %></span>
+          <form method="post" action="/logout?lang=<%= lang %>" accept-charset="UTF-8">
+            <button class="btn btn-dark" type="submit"><%= isEn ? "Sign out" : "خروج" %></button>
+          </form>
+        </div>
+      </div>
+      <nav class="main-nav">
+        <a class="main-nav-link" href="/?lang=<%= lang %>"><%= isEn ? "Units" : "الوحدات" %></a>
+        <a class="main-nav-link is-active" href="/accounts?lang=<%= lang %>"><%= isEn ? "Accounts" : "الحسابات" %></a>
+      </nav>
+    </header>
+
+    <main class="page">
+      <section class="intro-card">
+        <h2><%= isEn ? "Sales overview" : "ملخص المبيعات" %></h2>
+        <p>
+          <%= isEn
+            ? "Earnings use the amount paid on each booking. Older bookings without a paid amount use list rates as an estimate."
+            : "الأرباح من المبلغ المدفوع في كل حجز. الحجوزات القديمة بدون مبلغ تُقدَّر من أسعار القائمة." %>
+        </p>
+      </section>
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <span class="stat-label"><%= isEn ? "Active bookings" : "حجوزات نشطة" %></span>
+          <strong class="stat-value"><%= summary.totalActiveBookings %></strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label"><%= isEn ? "Occupied now" : "مشغول الآن" %></span>
+          <strong class="stat-value"><%= summary.occupiedNow %></strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label"><%= isEn ? "Available now" : "متاح الآن" %></span>
+          <strong class="stat-value"><%= summary.availableNow %></strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label"><%= isEn ? "Future booked" : "محجوز قادم" %></span>
+          <strong class="stat-value"><%= summary.upcomingUnits %></strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label"><%= isEn ? "List rates (monthly)" : "أسعار القائمة (شهري)" %></span>
+          <strong class="stat-value"><%= h.formatPrice(summary.catalogMonthly) %></strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label"><%= isEn ? "List rates (yearly)" : "أسعار القائمة (سنوي)" %></span>
+          <strong class="stat-value"><%= h.formatPrice(summary.catalogYearly) %></strong>
+        </div>
+        <div class="stat-card stat-card-highlight">
+          <span class="stat-label"><%= isEn ? "Total earnings (all units)" : "إجمالي الأرباح (كل الوحدات)" %></span>
+          <strong class="stat-value money-highlight"><%= h.formatPrice(summary.totalEarnings) %></strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label"><%= isEn ? "Earned (past stays)" : "متحقق (إقامات منتهية)" %></span>
+          <strong class="stat-value"><%= h.formatPrice(summary.realizedEarnings) %></strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label"><%= isEn ? "Current stays" : "إقامات جارية" %></span>
+          <strong class="stat-value"><%= h.formatPrice(summary.ongoingEarnings) %></strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label"><%= isEn ? "Upcoming stays" : "إقامات قادمة" %></span>
+          <strong class="stat-value"><%= h.formatPrice(summary.upcomingEarnings) %></strong>
+        </div>
+      </div>
+
+      <div class="accounts-list">
+        <% rows.forEach((row) => { %>
+        <article class="account-card">
+          <div class="account-card-top">
+            <div>
+              <h3 class="unit-title"><%= row.name %></h3>
+              <p class="account-sub">
+                <%= isEn ? "Apt." : "رقم الشقه" %> <%= row.code %>
+                · <%= h.typeLabel(row.type) %>
+              </p>
+            </div>
+            <span class="status-pill <%= row.availability.cssClass %>"><%= row.availability.label %></span>
+          </div>
+
+          <div class="earnings-block">
+            <p class="price-block-title"><%= isEn ? "Total earnings (this unit)" : "إجمالي الأرباح (هذه الوحدة)" %></p>
+            <p class="earnings-total money-highlight"><%= h.formatPrice(row.earnings.total) %></p>
+            <p class="earnings-note">
+              <%= isEn
+                ? `${row.earnings.bookingCount} booking(s) · sum of amounts paid`
+                : `${row.earnings.bookingCount} حجز · مجموع المبالغ المدفوعة` %>
+            </p>
+            <div class="price-rows price-rows-3">
+              <div>
+                <span><%= isEn ? "Past stays" : "منتهية" %></span>
+                <strong><%= h.formatPrice(row.earnings.realized) %></strong>
+              </div>
+              <div>
+                <span><%= isEn ? "Current" : "جارية" %></span>
+                <strong><%= h.formatPrice(row.earnings.ongoing) %></strong>
+              </div>
+              <div>
+                <span><%= isEn ? "Upcoming" : "قادمة" %></span>
+                <strong><%= h.formatPrice(row.earnings.upcoming) %></strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="sales-stats-grid">
+            <div class="sales-stat">
+              <span><%= isEn ? "Active bookings" : "حجوزات نشطة" %></span>
+              <strong><%= row.activeBookings %></strong>
+            </div>
+            <div class="sales-stat">
+              <span><%= isEn ? "Ongoing" : "جارية" %></span>
+              <strong><%= row.ongoingBookings %></strong>
+            </div>
+            <div class="sales-stat">
+              <span><%= isEn ? "Upcoming" : "قادمة" %></span>
+              <strong><%= row.upcomingBookings %></strong>
+            </div>
+            <div class="sales-stat">
+              <span><%= isEn ? "Past (still listed)" : "منتهية" %></span>
+              <strong><%= row.pastBookings %></strong>
+            </div>
+          </div>
+
+          <div class="price-block">
+            <p class="price-block-title"><%= isEn ? "List rates" : "أسعار القائمة" %></p>
+            <div class="price-rows price-rows-3">
+              <div><span><%= isEn ? "Daily" : "يومي" %></span><strong><%= h.formatPrice(row.rates.daily) %></strong></div>
+              <div><span><%= isEn ? "Monthly" : "شهري" %></span><strong><%= h.formatPrice(row.rates.monthly) %></strong></div>
+              <div><span><%= isEn ? "Yearly" : "سنوي" %></span><strong><%= h.formatPrice(row.rates.yearly) %></strong></div>
+            </div>
+          </div>
+
+          <a class="btn btn-ghost btn-block" href="/properties/<%= row.id %>?lang=<%= lang %>"><%= isEn ? "Open unit" : "فتح الوحدة" %></a>
+        </article>
+        <% }) %>
+      </div>
+
+      <% if (!rows.length) { %>
+      <p class="empty-state"><%= isEn ? "Add units from the Units tab first." : "أضف وحدات من تبويب الوحدات أولاً." %></p>
+      <% } %>
+    </main>
+  </body>
+</html>

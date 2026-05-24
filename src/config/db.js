@@ -20,15 +20,46 @@ async function getUserByEmail(email) {
   return result.rows[0] || null;
 }
 
-async function getPropertiesWithBookingCount() {
+async function getPropertiesList() {
   const result = await query(
     `SELECT
       p.id, p.code, p.name, p.type, p.rooms,
-      COUNT(CASE WHEN b.status IN ('booked', 'confirmed') THEN 1 END)::int AS booked_count
+      p.price_daily, p.price_monthly, p.price_yearly,
+      p.sale_probability
     FROM properties p
-    LEFT JOIN bookings b ON b.property_id = p.id
-    GROUP BY p.id
     ORDER BY p.id ASC`
+  );
+  return result.rows;
+}
+
+async function getAllBookingsForStats() {
+  const result = await query(
+    `SELECT
+      property_id,
+      status,
+      start_date,
+      end_date,
+      amount_paid,
+      TO_CHAR(start_date, 'YYYY-MM-DD HH24:MI') AS start_date_display,
+      TO_CHAR(end_date, 'YYYY-MM-DD HH24:MI') AS end_date_display
+    FROM bookings
+    ORDER BY start_date ASC`
+  );
+  return result.rows;
+}
+
+async function getActiveBookingsForAvailability() {
+  const result = await query(
+    `SELECT
+      b.property_id,
+      b.status,
+      b.start_date,
+      b.end_date,
+      TO_CHAR(b.start_date, 'YYYY-MM-DD HH24:MI') AS start_date_display,
+      TO_CHAR(b.end_date, 'YYYY-MM-DD HH24:MI') AS end_date_display
+    FROM bookings b
+    WHERE b.status IN ('booked', 'confirmed')
+    ORDER BY b.start_date ASC`
   );
   return result.rows;
 }
@@ -54,25 +85,30 @@ async function getBookingsByPropertyId(propertyId) {
   return result.rows;
 }
 
-async function updateProperty({ id, name, code, type, rooms }) {
-  await query("UPDATE properties SET name = $1, code = $2, type = $3, rooms = $4 WHERE id = $5", [
-    name,
-    code,
-    type,
-    rooms,
-    id
-  ]);
+async function updateProperty({ id, name, code, type, rooms, priceDaily, priceMonthly, priceYearly }) {
+  await query(
+    `UPDATE properties
+     SET name = $1, code = $2, type = $3, rooms = $4,
+         price_daily = $5, price_monthly = $6, price_yearly = $7
+     WHERE id = $8`,
+    [name, code, type, rooms, priceDaily, priceMonthly, priceYearly, id]
+  );
 }
 
-async function createProperty({ code, name, type, rooms }) {
+async function createProperty({ code, name, type, rooms, priceDaily, priceMonthly, priceYearly }) {
   await query(
-    "INSERT INTO properties (code, name, type, rooms, created_at) VALUES ($1, $2, $3, $4, NOW())",
-    [code, name, type, rooms]
+    `INSERT INTO properties (code, name, type, rooms, price_daily, price_monthly, price_yearly, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+    [code, name, type, rooms, priceDaily, priceMonthly, priceYearly]
   );
 }
 
 async function deleteProperty(id) {
   await query("DELETE FROM properties WHERE id = $1", [id]);
+}
+
+async function updateSaleProbability(id, saleProbability) {
+  await query("UPDATE properties SET sale_probability = $1 WHERE id = $2", [saleProbability, id]);
 }
 
 async function findOverlappingBooking({ propertyId, startDate, endDate, excludeBookingId = null }) {
@@ -95,11 +131,19 @@ async function findOverlappingBooking({ propertyId, startDate, endDate, excludeB
   return result.rows[0] || null;
 }
 
-async function createBooking({ propertyId, clientName, staffName, startDate, endDate, status }) {
+async function createBooking({
+  propertyId,
+  clientName,
+  staffName,
+  startDate,
+  endDate,
+  status,
+  amountPaid
+}) {
   await query(
-    `INSERT INTO bookings (property_id, client_name, staff_name, start_date, end_date, status, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-    [propertyId, clientName, staffName, startDate, endDate, status]
+    `INSERT INTO bookings (property_id, client_name, staff_name, start_date, end_date, status, amount_paid, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+    [propertyId, clientName, staffName, startDate, endDate, status, amountPaid]
   );
 }
 
@@ -110,13 +154,14 @@ async function updateBooking({
   staffName,
   startDate,
   endDate,
-  status
+  status,
+  amountPaid
 }) {
   await query(
     `UPDATE bookings
-     SET client_name = $1, staff_name = $2, start_date = $3, end_date = $4, status = $5
-     WHERE id = $6 AND property_id = $7`,
-    [clientName, staffName, startDate, endDate, status, bookingId, propertyId]
+     SET client_name = $1, staff_name = $2, start_date = $3, end_date = $4, status = $5, amount_paid = $6
+     WHERE id = $7 AND property_id = $8`,
+    [clientName, staffName, startDate, endDate, status, amountPaid, bookingId, propertyId]
   );
 }
 
@@ -136,6 +181,10 @@ async function bootstrapDatabase() {
       name TEXT NOT NULL,
       type TEXT NOT NULL CHECK (type IN ('apartment', 'duplex', 'villa')),
       rooms INTEGER NOT NULL DEFAULT 1,
+      price_daily NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      price_monthly NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      price_yearly NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      sale_probability INTEGER NOT NULL DEFAULT 50 CHECK (sale_probability >= 0 AND sale_probability <= 100),
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
 
@@ -147,6 +196,7 @@ async function bootstrapDatabase() {
       start_date TIMESTAMP NOT NULL,
       end_date TIMESTAMP NOT NULL,
       status TEXT NOT NULL CHECK (status IN ('booked', 'confirmed', 'cancelled')),
+      amount_paid NUMERIC(12, 2) NOT NULL DEFAULT 0,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
@@ -173,6 +223,12 @@ async function bootstrapDatabase() {
       ) THEN
         ALTER TABLE bookings ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT NOW();
       END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'amount_paid'
+      ) THEN
+        ALTER TABLE bookings ADD COLUMN amount_paid NUMERIC(12, 2) NOT NULL DEFAULT 0;
+      END IF;
     END
     $$;
   `);
@@ -189,6 +245,54 @@ async function bootstrapDatabase() {
     END
     $$;
   `);
+
+  await query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'properties' AND column_name = 'price_daily'
+      ) THEN
+        ALTER TABLE properties ADD COLUMN price_daily NUMERIC(12, 2) NOT NULL DEFAULT 0;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'properties' AND column_name = 'price_monthly'
+      ) THEN
+        ALTER TABLE properties ADD COLUMN price_monthly NUMERIC(12, 2) NOT NULL DEFAULT 0;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'properties' AND column_name = 'price_yearly'
+      ) THEN
+        ALTER TABLE properties ADD COLUMN price_yearly NUMERIC(12, 2) NOT NULL DEFAULT 0;
+      END IF;
+    END
+    $$;
+  `);
+
+  await query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'properties' AND column_name = 'sale_probability'
+      ) THEN
+        ALTER TABLE properties ADD COLUMN sale_probability INTEGER NOT NULL DEFAULT 50;
+      END IF;
+    END
+    $$;
+  `);
+  await query(`
+    UPDATE properties
+    SET sale_probability = LEAST(100, GREATEST(0, COALESCE(sale_probability, 50)))
+    WHERE sale_probability IS NULL OR sale_probability < 0 OR sale_probability > 100
+  `);
+  await query(`ALTER TABLE properties DROP CONSTRAINT IF EXISTS properties_sale_probability_check`);
+  await query(
+    `ALTER TABLE properties ADD CONSTRAINT properties_sale_probability_check
+     CHECK (sale_probability >= 0 AND sale_probability <= 100)`
+  );
 
   await query("ALTER TABLE properties DROP CONSTRAINT IF EXISTS properties_type_check");
   await query("UPDATE properties SET type = 'apartment' WHERE type = 'house'");
@@ -220,20 +324,20 @@ async function bootstrapDatabase() {
   if (propertiesCount.rows[0].count === 0) {
     const now = new Date().toISOString().slice(0, 10);
     const p1 = await query(
-      "INSERT INTO properties (code, name, type, rooms, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-      [127, "دوبلكس الزملاك جنينة الأسماك", "duplex", 5, now]
+      `INSERT INTO properties (code, name, type, rooms, price_daily, price_monthly, price_yearly, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      [127, "دوبلكس الزملاك جنينة الأسماك", "duplex", 5, 2500, 45000, 480000, now]
     );
     const p2 = await query(
-      "INSERT INTO properties (code, name, type, rooms, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-      [124, "دوبلكس ايستاون H1-34-23 التجمع الخامس", "duplex", 4, now]
+      `INSERT INTO properties (code, name, type, rooms, price_daily, price_monthly, price_yearly, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      [124, "دوبلكس ايستاون H1-34-23 التجمع الخامس", "duplex", 4, 2200, 40000, 420000, now]
     );
-    await query("INSERT INTO properties (code, name, type, rooms, created_at) VALUES ($1, $2, $3, $4, $5)", [
-      130,
-      "فيلا مستقلة - الشيخ زايد",
-      "villa",
-      6,
-      now
-    ]);
+    await query(
+      `INSERT INTO properties (code, name, type, rooms, price_daily, price_monthly, price_yearly, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [130, "فيلا مستقلة - الشيخ زايد", "villa", 6, 5000, 90000, 950000, now]
+    );
 
     await createBooking({
       propertyId: p1.rows[0].id,
@@ -241,7 +345,8 @@ async function bootstrapDatabase() {
       staffName: "مهران",
       startDate: "2026-04-23",
       endDate: "2026-04-27",
-      status: "confirmed"
+      status: "confirmed",
+      amountPaid: 10000
     });
     await createBooking({
       propertyId: p2.rows[0].id,
@@ -249,7 +354,8 @@ async function bootstrapDatabase() {
       staffName: "محمد سمير",
       startDate: "2026-04-09",
       endDate: "2026-04-23",
-      status: "confirmed"
+      status: "confirmed",
+      amountPaid: 30800
     });
   }
 }
@@ -259,12 +365,15 @@ module.exports = {
   query,
   bootstrapDatabase,
   getUserByEmail,
-  getPropertiesWithBookingCount,
+  getPropertiesList,
+  getActiveBookingsForAvailability,
+  getAllBookingsForStats,
   getPropertyById,
   getBookingsByPropertyId,
   updateProperty,
   createProperty,
   deleteProperty,
+  updateSaleProbability,
   findOverlappingBooking,
   createBooking,
   updateBooking
