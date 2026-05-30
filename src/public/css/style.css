@@ -600,6 +600,230 @@ td { padding: 0.65rem; border-top: 1px solid var(--border); background: #fff; }
   }
 }
 
+.unit-card-photo {
+  margin: -0.85rem -0.85rem 0.75rem;
+  border-radius: var(--radius) var(--radius) 0 0;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  background: #e2e8f0;
+}
+
+.unit-card-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.photo-slider {
+  position: relative;
+  margin-bottom: 1rem;
+  background: #0f172a;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.photo-slider-compact {
+  margin: -0.85rem -0.85rem 0.75rem;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.photo-slider-viewport {
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+}
+
+.photo-slider-track {
+  display: flex;
+  height: 100%;
+  transition: transform 0.35s ease;
+  will-change: transform;
+}
+
+.photo-slide {
+  position: relative;
+  flex: 0 0 100%;
+  height: 100%;
+}
+
+.photo-slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.photo-slider-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-slider-arrow:hover {
+  background: rgba(15, 23, 42, 0.92);
+}
+
+.photo-slider-prev {
+  inset-inline-start: 0.45rem;
+}
+
+.photo-slider-next {
+  inset-inline-end: 0.45rem;
+}
+
+.photo-slider-dots {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0.45rem;
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  padding: 0 2.5rem;
+  z-index: 2;
+}
+
+.photo-slider-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  padding: 0;
+}
+
+.photo-slider-dot.is-active {
+  background: #fff;
+  transform: scale(1.15);
+}
+
+.photo-slider-counter {
+  position: absolute;
+  top: 0.45rem;
+  inset-inline-end: 0.55rem;
+  z-index: 2;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+}
+
+.photo-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.photo-gallery-item {
+  position: relative;
+  margin: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #e2e8f0;
+  aspect-ratio: 4 / 3;
+}
+
+.photo-gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.photo-delete-form {
+  position: absolute;
+  inset-inline-end: 0.35rem;
+  top: 0.35rem;
+}
+
+.photo-upload-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.photo-upload-form input[type="file"] {
+  flex: 1 1 220px;
+}
+
+.photo-empty {
+  margin-bottom: 1rem;
+}
+
+.profit-panel {
+  margin-bottom: 1rem;
+}
+
+.unit-picker-label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0.75rem 0 0.35rem;
+}
+
+.unit-picker {
+  width: 100%;
+  max-width: 420px;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  margin-bottom: 1rem;
+}
+
+.profit-unit-head h3 {
+  margin: 0 0 0.35rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.profit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.profit-table th,
+.profit-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+}
+
+.profit-table th {
+  background: #f8fafc;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.profit-table tbody tr:hover {
+  background: #f8fafc;
+}
+
 @media (max-width: 640px) {
   .form-grid-2 { grid-template-columns: 1fr; }
   .site-header-inner { flex-direction: column; }

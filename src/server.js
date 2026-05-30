@@ -17,6 +17,8 @@ const {
   updateProperty,
   createProperty,
   deleteProperty,
+  appendPropertyPhotos,
+  removePropertyPhoto,
   getAllBookingsForStats,
   findOverlappingBooking,
   createBooking,
@@ -31,6 +33,15 @@ const {
 const { attachAvailabilityToProperties, computeUnitAvailability } = require("./availability");
 const { buildSalesDashboard } = require("./sales-statistics");
 const { typeLabel, formatPrice } = require("./view-helpers");
+const {
+  upload: photoUpload,
+  parsePhotosJson,
+  publicUrl,
+  deletePhotoFile,
+  deletePropertyUploads,
+  MAX_PROPERTY_PHOTOS,
+  MAX_UPLOAD_BATCH
+} = require("./property-photos");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -128,6 +139,24 @@ function parsePricesField(body, lang) {
   return { priceDaily: daily, priceMonthly: monthly, priceYearly: yearly };
 }
 
+function parseExpensesField(body, lang) {
+  const isEn = lang === "en";
+  const n = Number(body.monthly_expenses);
+  if (!Number.isFinite(n) || n < 0) {
+    return { error: isEn ? "Enter valid monthly expenses (0 or more)." : "أدخل مصروفات شهرية صحيحة (0 أو أكثر)." };
+  }
+  return { monthlyExpenses: n };
+}
+
+function enrichProperty(property) {
+  if (!property) return null;
+  return {
+    ...property,
+    photos: parsePhotosJson(property.photos),
+    monthly_expenses: Number(property.monthly_expenses) || 0
+  };
+}
+
 function viewHelpers(lang) {
   return {
     typeLabel: (t) => typeLabel(t, lang),
@@ -155,6 +184,7 @@ ejs.fileLoader = readViewSource;
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 app.use("/assets", express.static(path.join(__dirname, "public")));
+app.use("/uploads", express.static(path.join(__dirname, "public", "uploads")));
 app.use(express.urlencoded({ extended: true }));
 
 app.use(
@@ -207,6 +237,8 @@ app.get("/accounts", requireAuth, async (req, res) => {
   const properties = await getPropertiesList();
   const allBookings = await getAllBookingsForStats();
   const { rows, summary } = buildSalesDashboard(properties, allBookings, lang);
+  const selectedUnitId = parsePropertyIdParam(req.query.unit);
+  const selectedRow = selectedUnitId ? rows.find((r) => r.id === selectedUnitId) || null : null;
 
   return res.render("accounts", {
     title: "Maya's Property — Accounts",
@@ -214,6 +246,8 @@ app.get("/accounts", requireAuth, async (req, res) => {
     user: req.session.user,
     rows,
     summary,
+    selectedUnitId,
+    selectedRow,
     h: viewHelpers(lang)
   });
 });
@@ -224,7 +258,7 @@ app.get("/", async (req, res) => {
   const success = req.query.success || "";
   const rows = await getPropertiesList();
   const bookingRows = await getActiveBookingsForAvailability();
-  const properties = attachAvailabilityToProperties(rows, bookingRows, lang);
+  const properties = attachAvailabilityToProperties(rows, bookingRows, lang).map((p) => enrichProperty(p));
 
   return res.render("index", {
     title: "Maya's Property",
@@ -267,6 +301,11 @@ app.post("/properties", requireAuth, async (req, res) => {
     return res.redirect(`/?lang=${lang}&error=${encodeURIComponent(pricesParsed.error)}`);
   }
 
+  const expensesParsed = parseExpensesField(req.body, lang);
+  if (expensesParsed.error) {
+    return res.redirect(`/?lang=${lang}&error=${encodeURIComponent(expensesParsed.error)}`);
+  }
+
   try {
     await createProperty({
       name,
@@ -275,7 +314,8 @@ app.post("/properties", requireAuth, async (req, res) => {
       rooms: roomsParsed.rooms,
       priceDaily: pricesParsed.priceDaily,
       priceMonthly: pricesParsed.priceMonthly,
-      priceYearly: pricesParsed.priceYearly
+      priceYearly: pricesParsed.priceYearly,
+      monthlyExpenses: expensesParsed.monthlyExpenses
     });
     return res.redirect(
       `/?lang=${lang}&success=${encodeURIComponent(
@@ -302,7 +342,7 @@ app.get("/properties/:id", async (req, res) => {
   const lang = req.query.lang === "en" ? "en" : "ar";
   const error = req.query.error || "";
   const success = req.query.success || "";
-  const property = await getPropertyById(Number(req.params.id));
+  const property = enrichProperty(await getPropertyById(Number(req.params.id)));
   if (!property) return res.status(404).send("Unit not found.");
 
   const bookings = await getBookingsByPropertyId(Number(req.params.id));
@@ -317,6 +357,7 @@ app.get("/properties/:id", async (req, res) => {
     availability,
     error,
     success,
+    maxPhotos: MAX_PROPERTY_PHOTOS,
     h: viewHelpers(lang)
   });
 });
@@ -353,6 +394,13 @@ app.post("/properties/:id", requireAuth, async (req, res) => {
     );
   }
 
+  const expensesParsed = parseExpensesField(req.body, lang);
+  if (expensesParsed.error) {
+    return res.redirect(
+      `/properties/${req.params.id}?lang=${lang}&error=${encodeURIComponent(expensesParsed.error)}`
+    );
+  }
+
   try {
     await updateProperty({
       id: Number(req.params.id),
@@ -362,7 +410,8 @@ app.post("/properties/:id", requireAuth, async (req, res) => {
       rooms: roomsParsed.rooms,
       priceDaily: pricesParsed.priceDaily,
       priceMonthly: pricesParsed.priceMonthly,
-      priceYearly: pricesParsed.priceYearly
+      priceYearly: pricesParsed.priceYearly,
+      monthlyExpenses: expensesParsed.monthlyExpenses
     });
   } catch (error) {
     if (String(error.message || "").includes("duplicate key")) {
@@ -379,12 +428,110 @@ app.post("/properties/:id", requireAuth, async (req, res) => {
 
 app.post("/properties/:id/delete", requireAuth, async (req, res) => {
   const lang = req.query.lang === "en" ? "en" : "ar";
-  await deleteProperty(Number(req.params.id));
+  const propertyId = Number(req.params.id);
+  deletePropertyUploads(propertyId);
+  await deleteProperty(propertyId);
   return res.redirect(
     `/?lang=${lang}&success=${encodeURIComponent(
       lang === "en" ? "Unit deleted." : "تم حذف الوحدة."
     )}`
   );
+});
+
+app.post("/properties/:id/photos", requireAuth, (req, res, next) => {
+  photoUpload.array("photos", MAX_UPLOAD_BATCH)(req, res, (err) => {
+    if (err) {
+      const lang = req.query.lang === "en" ? "en" : "ar";
+      const propertyId = parsePropertyIdParam(req.params.id) || req.params.id;
+      const msg =
+        lang === "en"
+          ? err.message || "Could not upload photos."
+          : "تعذر رفع الصور.";
+      return res.redirect(`/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(msg)}`);
+    }
+    next();
+  });
+}, async (req, res) => {
+  const lang = req.query.lang === "en" ? "en" : "ar";
+  const propertyId = parsePropertyIdParam(req.params.id);
+  if (!propertyId) return res.status(400).send("Bad request");
+
+  const property = await getPropertyById(propertyId);
+  if (!property) return res.status(404).send("Unit not found.");
+
+  const files = req.files || [];
+  if (!files.length) {
+    return res.redirect(
+      `/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(
+        lang === "en" ? "Choose at least one image to upload." : "اختر صورة واحدة على الأقل للرفع."
+      )}`
+    );
+  }
+
+  const existing = parsePhotosJson(property.photos);
+  const slotsLeft = MAX_PROPERTY_PHOTOS - existing.length;
+  if (slotsLeft <= 0) {
+    files.forEach((f) => deletePhotoFile(publicUrl(propertyId, f.filename)));
+    return res.redirect(
+      `/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(
+        lang === "en"
+          ? `This unit already has ${MAX_PROPERTY_PHOTOS} photos. Remove some first.`
+          : `هذه الوحدة لديها ${MAX_PROPERTY_PHOTOS} صورة بالفعل. احذف بعضاً أولاً.`
+      )}`
+    );
+  }
+
+  const accepted = files.slice(0, slotsLeft);
+  const overflow = files.slice(slotsLeft);
+  overflow.forEach((f) => deletePhotoFile(publicUrl(propertyId, f.filename)));
+
+  try {
+    const urls = accepted.map((f) => publicUrl(propertyId, f.filename));
+    await appendPropertyPhotos(propertyId, urls);
+    let successMsg = lang === "en" ? `${urls.length} photo(s) uploaded.` : `تم رفع ${urls.length} صورة.`;
+    if (overflow.length) {
+      successMsg +=
+        lang === "en"
+          ? ` (${overflow.length} skipped — max ${MAX_PROPERTY_PHOTOS} per unit.)`
+          : ` (تم تخطي ${overflow.length} — الحد ${MAX_PROPERTY_PHOTOS} لكل وحدة.)`;
+    }
+    return res.redirect(
+      `/properties/${propertyId}?lang=${lang}&success=${encodeURIComponent(successMsg)}`
+    );
+  } catch (err) {
+    console.error("Photo upload failed:", err);
+    return res.redirect(
+      `/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(
+        lang === "en" ? "Could not upload photos." : "تعذر رفع الصور."
+      )}`
+    );
+  }
+});
+
+app.post("/properties/:id/photos/delete", requireAuth, async (req, res) => {
+  const lang = req.query.lang === "en" ? "en" : "ar";
+  const propertyId = parsePropertyIdParam(req.params.id);
+  const photoUrl = String(req.body.photo_url ?? "").trim();
+  if (!propertyId || !photoUrl.startsWith(`/uploads/properties/${propertyId}/`)) {
+    return res.status(400).send("Bad request");
+  }
+
+  try {
+    deletePhotoFile(photoUrl);
+    await removePropertyPhoto(propertyId, photoUrl);
+    return res.redirect(
+      `/properties/${propertyId}?lang=${lang}&success=${encodeURIComponent(
+        lang === "en" ? "Photo removed." : "تم حذف الصورة."
+      )}`
+    );
+  } catch (err) {
+    console.error("Photo delete failed:", err);
+    return res.redirect(
+      `/properties/${propertyId}?lang=${lang}&error=${encodeURIComponent(
+        lang === "en" ? "Could not remove photo." : "تعذر حذف الصورة."
+      )}`
+    );
+  }
 });
 
 app.post("/properties/:id/bookings", requireAuth, async (req, res) => {

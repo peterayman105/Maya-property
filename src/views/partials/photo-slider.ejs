@@ -1,0 +1,44 @@
+<% const photoList = photos || []; %>
+<% if (photoList.length) { %>
+<div class="photo-slider<%= compact ? ' photo-slider-compact' : '' %>" data-photo-slider>
+  <div class="photo-slider-viewport">
+    <div class="photo-slider-track">
+      <% photoList.forEach((photo, photoIdx) => { %>
+      <div class="photo-slide">
+        <img
+          src="<%= photo %>"
+          alt="<%= name %> — <%= photoIdx + 1 %>/<%= photoList.length %>"
+          loading="<%= photoIdx === 0 ? 'eager' : 'lazy' %>"
+        />
+        <% if (showDelete && user) { %>
+        <form
+          class="photo-delete-form"
+          method="post"
+          action="/properties/<%= propertyId %>/photos/delete?lang=<%= lang %>"
+          onsubmit="return confirm('<%= isEn ? "Remove this photo?" : "حذف هذه الصورة؟" %>');"
+        >
+          <input type="hidden" name="photo_url" value="<%= photo %>" />
+          <button class="btn btn-danger btn-sm" type="submit"><%= isEn ? "Remove" : "حذف" %></button>
+        </form>
+        <% } %>
+      </div>
+      <% }) %>
+    </div>
+  </div>
+  <% if (photoList.length > 1) { %>
+  <button type="button" class="photo-slider-arrow photo-slider-prev" aria-label="<%= isEn ? 'Previous photo' : 'الصورة السابقة' %>">&#8249;</button>
+  <button type="button" class="photo-slider-arrow photo-slider-next" aria-label="<%= isEn ? 'Next photo' : 'الصورة التالية' %>">&#8250;</button>
+  <div class="photo-slider-dots" role="tablist">
+    <% photoList.forEach((_p, dotIdx) => { %>
+    <button
+      type="button"
+      class="photo-slider-dot<%= dotIdx === 0 ? ' is-active' : '' %>"
+      data-index="<%= dotIdx %>"
+      aria-label="<%= isEn ? ('Photo ' + (dotIdx + 1)) : ('صورة ' + (dotIdx + 1)) %>"
+    ></button>
+    <% }) %>
+  </div>
+  <span class="photo-slider-counter">1 / <%= photoList.length %></span>
+  <% } %>
+</div>
+<% } %>

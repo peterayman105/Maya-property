@@ -1,5 +1,6 @@
 const { Pool } = require("pg");
 const bcrypt = require("bcryptjs");
+const { parsePhotosJson } = require("../property-photos");
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is missing. Please check your .env file in project root.");
@@ -25,6 +26,7 @@ async function getPropertiesList() {
     `SELECT
       p.id, p.code, p.name, p.type, p.rooms,
       p.price_daily, p.price_monthly, p.price_yearly,
+      p.monthly_expenses, p.photos,
       p.sale_probability
     FROM properties p
     ORDER BY p.id ASC`
@@ -85,22 +87,60 @@ async function getBookingsByPropertyId(propertyId) {
   return result.rows;
 }
 
-async function updateProperty({ id, name, code, type, rooms, priceDaily, priceMonthly, priceYearly }) {
+async function updateProperty({
+  id,
+  name,
+  code,
+  type,
+  rooms,
+  priceDaily,
+  priceMonthly,
+  priceYearly,
+  monthlyExpenses
+}) {
   await query(
     `UPDATE properties
      SET name = $1, code = $2, type = $3, rooms = $4,
-         price_daily = $5, price_monthly = $6, price_yearly = $7
-     WHERE id = $8`,
-    [name, code, type, rooms, priceDaily, priceMonthly, priceYearly, id]
+         price_daily = $5, price_monthly = $6, price_yearly = $7,
+         monthly_expenses = $8
+     WHERE id = $9`,
+    [name, code, type, rooms, priceDaily, priceMonthly, priceYearly, monthlyExpenses, id]
   );
 }
 
-async function createProperty({ code, name, type, rooms, priceDaily, priceMonthly, priceYearly }) {
+async function createProperty({
+  code,
+  name,
+  type,
+  rooms,
+  priceDaily,
+  priceMonthly,
+  priceYearly,
+  monthlyExpenses
+}) {
   await query(
-    `INSERT INTO properties (code, name, type, rooms, price_daily, price_monthly, price_yearly, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
-    [code, name, type, rooms, priceDaily, priceMonthly, priceYearly]
+    `INSERT INTO properties (code, name, type, rooms, price_daily, price_monthly, price_yearly, monthly_expenses, photos, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '[]'::jsonb, NOW())`,
+    [code, name, type, rooms, priceDaily, priceMonthly, priceYearly, monthlyExpenses]
   );
+}
+
+async function setPropertyPhotos(id, photos) {
+  await query(`UPDATE properties SET photos = $1::jsonb WHERE id = $2`, [JSON.stringify(photos), id]);
+}
+
+async function appendPropertyPhotos(id, photoUrls) {
+  const row = await getPropertyById(id);
+  if (!row) return;
+  const next = [...parsePhotosJson(row.photos), ...photoUrls];
+  await setPropertyPhotos(id, next);
+}
+
+async function removePropertyPhoto(id, photoUrl) {
+  const row = await getPropertyById(id);
+  if (!row) return;
+  const next = parsePhotosJson(row.photos).filter((p) => p !== photoUrl);
+  await setPropertyPhotos(id, next);
 }
 
 async function deleteProperty(id) {
@@ -184,6 +224,8 @@ async function bootstrapDatabase() {
       price_daily NUMERIC(12, 2) NOT NULL DEFAULT 0,
       price_monthly NUMERIC(12, 2) NOT NULL DEFAULT 0,
       price_yearly NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      monthly_expenses NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      photos JSONB NOT NULL DEFAULT '[]'::jsonb,
       sale_probability INTEGER NOT NULL DEFAULT 50 CHECK (sale_probability >= 0 AND sale_probability <= 100),
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
@@ -266,6 +308,18 @@ async function bootstrapDatabase() {
         WHERE table_schema = 'public' AND table_name = 'properties' AND column_name = 'price_yearly'
       ) THEN
         ALTER TABLE properties ADD COLUMN price_yearly NUMERIC(12, 2) NOT NULL DEFAULT 0;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'properties' AND column_name = 'monthly_expenses'
+      ) THEN
+        ALTER TABLE properties ADD COLUMN monthly_expenses NUMERIC(12, 2) NOT NULL DEFAULT 0;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'properties' AND column_name = 'photos'
+      ) THEN
+        ALTER TABLE properties ADD COLUMN photos JSONB NOT NULL DEFAULT '[]'::jsonb;
       END IF;
     END
     $$;
@@ -373,6 +427,9 @@ module.exports = {
   updateProperty,
   createProperty,
   deleteProperty,
+  setPropertyPhotos,
+  appendPropertyPhotos,
+  removePropertyPhoto,
   updateSaleProbability,
   findOverlappingBooking,
   createBooking,

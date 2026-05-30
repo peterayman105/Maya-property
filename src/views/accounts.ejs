@@ -81,6 +81,57 @@
         </div>
       </div>
 
+      <section class="panel profit-panel">
+        <h2><%= isEn ? "Monthly net profit" : "صافي الربح الشهري" %></h2>
+        <p class="earnings-note">
+          <%= isEn
+            ? "Net profit = monthly list rate − monthly expenses (same for each month at current rates)."
+            : "صافي الربح = السعر الشهري − المصروفات الشهرية (نفس القيمة لكل شهر بالأسعار الحالية)." %>
+        </p>
+        <label class="unit-picker-label" for="unitProfitSelect"><%= isEn ? "Choose unit" : "اختر الوحدة" %></label>
+        <select id="unitProfitSelect" class="unit-picker">
+          <option value=""><%= isEn ? "— Select a unit —" : "— اختر وحدة —" %></option>
+          <% rows.forEach((row) => { %>
+          <option value="<%= row.id %>" <%= selectedUnitId === row.id ? "selected" : "" %>><%= row.name %> (<%= isEn ? "Apt." : "شقة" %> <%= row.code %>)</option>
+          <% }) %>
+        </select>
+
+        <% if (selectedRow) { %>
+        <div class="profit-unit-head">
+          <h3><%= selectedRow.name %></h3>
+          <p class="account-sub">
+            <%= isEn ? "Monthly rate" : "السعر الشهري" %>: <%= h.formatPrice(selectedRow.rates.monthly) %>
+            · <%= isEn ? "Expenses" : "المصروفات" %>: <%= h.formatPrice(selectedRow.monthlyExpenses) %>
+            · <%= isEn ? "Net / month" : "الصافي / شهر" %>: <span class="money-highlight"><%= h.formatPrice(selectedRow.baseNetProfit) %></span>
+          </p>
+        </div>
+        <div class="table-wrap">
+          <table class="profit-table">
+            <thead>
+              <tr>
+                <th><%= isEn ? "Month" : "الشهر" %></th>
+                <th><%= isEn ? "Monthly rate" : "السعر الشهري" %></th>
+                <th><%= isEn ? "Expenses" : "المصروفات" %></th>
+                <th><%= isEn ? "Net profit" : "صافي الربح" %></th>
+              </tr>
+            </thead>
+            <tbody>
+              <% selectedRow.monthlyProfitTable.forEach((m) => { %>
+              <tr>
+                <td><%= m.label %></td>
+                <td><%= h.formatPrice(m.monthlyRate) %></td>
+                <td><%= h.formatPrice(m.expenses) %></td>
+                <td class="money-highlight"><%= h.formatPrice(m.netProfit) %></td>
+              </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+        <% } else if (rows.length) { %>
+        <p class="empty-state"><%= isEn ? "Select a unit to see the 12-month profit table." : "اختر وحدة لعرض جدول الأرباح لـ 12 شهراً." %></p>
+        <% } %>
+      </section>
+
       <div class="accounts-list">
         <% rows.forEach((row) => { %>
         <article class="account-card">
@@ -139,14 +190,19 @@
           </div>
 
           <div class="price-block">
-            <p class="price-block-title"><%= isEn ? "List rates" : "أسعار القائمة" %></p>
+            <p class="price-block-title"><%= isEn ? "List rates & expenses" : "الأسعار والمصروفات" %></p>
             <div class="price-rows price-rows-3">
               <div><span><%= isEn ? "Daily" : "يومي" %></span><strong><%= h.formatPrice(row.rates.daily) %></strong></div>
               <div><span><%= isEn ? "Monthly" : "شهري" %></span><strong><%= h.formatPrice(row.rates.monthly) %></strong></div>
               <div><span><%= isEn ? "Yearly" : "سنوي" %></span><strong><%= h.formatPrice(row.rates.yearly) %></strong></div>
             </div>
+            <p class="earnings-note">
+              <%= isEn ? "Expenses" : "المصروفات" %>: <%= h.formatPrice(row.monthlyExpenses) %>
+              · <%= isEn ? "Net / month" : "الصافي / شهر" %>: <strong class="money-highlight"><%= h.formatPrice(row.baseNetProfit) %></strong>
+            </p>
           </div>
 
+          <a class="btn btn-ghost btn-block" href="/accounts?lang=<%= lang %>&unit=<%= row.id %>"><%= isEn ? "View profit table" : "عرض جدول الأرباح" %></a>
           <a class="btn btn-ghost btn-block" href="/properties/<%= row.id %>?lang=<%= lang %>"><%= isEn ? "Open unit" : "فتح الوحدة" %></a>
         </article>
         <% }) %>
@@ -156,5 +212,6 @@
       <p class="empty-state"><%= isEn ? "Add units from the Units tab first." : "أضف وحدات من تبويب الوحدات أولاً." %></p>
       <% } %>
     </main>
+    <script src="/assets/js/main.js"></script>
   </body>
 </html>

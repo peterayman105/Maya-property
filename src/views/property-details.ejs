@@ -34,6 +34,21 @@
       <% if (success) { %><div class="alert alert-success"><%= success %></div><% } %>
 
       <section class="panel unit-hero">
+        <% if (property.photos && property.photos.length) { %>
+        <%- include('partials/photo-slider', {
+          photos: property.photos,
+          name: property.name,
+          compact: false,
+          showDelete: true,
+          user,
+          propertyId: property.id,
+          lang,
+          isEn
+        }) %>
+        <% } else { %>
+        <p class="empty-state photo-empty"><%= isEn ? "No photos yet." : "لا توجد صور بعد." %></p>
+        <% } %>
+
         <div class="unit-hero-top">
           <span class="status-pill <%= availability.cssClass %>"><%= availability.label %></span>
           <% if (user) { %>
@@ -55,9 +70,28 @@
             <div><span><%= isEn ? "Monthly" : "شهري" %></span><strong><%= h.formatPrice(property.price_monthly) %></strong></div>
             <div><span><%= isEn ? "Yearly" : "سنوي" %></span><strong><%= h.formatPrice(property.price_yearly) %></strong></div>
           </div>
+          <p class="earnings-note"><%= isEn ? "Monthly expenses" : "المصروفات الشهرية" %>: <strong><%= h.formatPrice(property.monthly_expenses) %></strong></p>
         </div>
         <% } %>
       </section>
+
+      <% if (user) { %>
+      <section class="panel">
+        <h3><%= isEn ? "Photos" : "الصور" %></h3>
+        <p class="earnings-note">
+          <%= isEn
+            ? `Upload up to ${maxPhotos} photos per unit (select many at once). Use arrows on the gallery to browse.`
+            : `ارفع حتى ${maxPhotos} صورة لكل وحدة (اختر عدة صور معاً). استخدم الأسهم في المعرض للتصفح.` %>
+          <% if (property.photos && property.photos.length) { %>
+          · <%= isEn ? "Current" : "الحالي" %>: <%= property.photos.length %>/<%= maxPhotos %>
+          <% } %>
+        </p>
+        <form class="photo-upload-form" method="post" action="/properties/<%= property.id %>/photos?lang=<%= lang %>" enctype="multipart/form-data">
+          <input type="file" name="photos" accept="image/jpeg,image/png,image/gif,image/webp" multiple required />
+          <button class="btn btn-primary" type="submit"><%= isEn ? "Upload photos" : "رفع الصور" %></button>
+        </form>
+      </section>
+      <% } %>
 
       <% if (user) { %>
       <section id="editPanel" class="panel hidden">
@@ -81,6 +115,8 @@
           <input name="price_monthly" type="number" min="0" step="0.01" value="<%= property.price_monthly != null ? property.price_monthly : 0 %>" required />
           <label><%= isEn ? "Yearly rate" : "السعر السنوي" %></label>
           <input name="price_yearly" type="number" min="0" step="0.01" value="<%= property.price_yearly != null ? property.price_yearly : 0 %>" required />
+          <label><%= isEn ? "Monthly expenses" : "المصروفات الشهرية" %></label>
+          <input name="monthly_expenses" type="number" min="0" step="0.01" value="<%= property.monthly_expenses != null ? property.monthly_expenses : 0 %>" required />
           <div class="form-span-all form-actions">
             <button class="btn btn-primary" type="submit"><%= isEn ? "Save" : "حفظ" %></button>
           </div>
